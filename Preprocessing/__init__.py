@@ -63,8 +63,8 @@ if __name__ == '__main__':
     # unpickle_file('ebooks_by_bookshelf')
 
     # nltk.download('stopwords')
-    stopwords = set(stopwords.words('english'))
+    stopwords_set = set(stopwords.words('english'))
     stemmer = SnowballStemmer('english')
 
     trim_ebook('PG10000')
-    preprocess_ebook('PG10000', stopwords, stemmer)
+    preprocess_ebook('PG10000', stopwords_set, stemmer)
