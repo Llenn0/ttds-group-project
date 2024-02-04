@@ -3,9 +3,8 @@ import pickle
 import re
 
 from nltk.corpus import stopwords
-from nltk.stem import SnowballStemmer
 from unidecode import unidecode
-
+from Stemmer import Stemmer
 
 def unpickle_file(name):
     """
@@ -22,7 +21,7 @@ def trim_ebook(book_id, raw_dir: str='', trim_dir: str=''):
     """
     :param name: str  |  e.g. 'PG10000'
     """
-    with open(raw_dir + book_id + '.txt', 'r') as file_in:
+    with open(raw_dir + book_id + '_raw.txt', 'r', encoding="UTF-8") as file_in:
         contents = file_in.read()
     
     title = re.search(r'Title: (.*)', contents).group(1).upper()
@@ -35,12 +34,11 @@ def trim_ebook(book_id, raw_dir: str='', trim_dir: str=''):
     # Blank lines removed here for readability; not optimal in terms of efficiency
     trimmed_contents = re.sub(r'\n{3,}', '\n\n', contents[start_index:end_index])
 
-    with open(trim_dir + book_id + '_trimmed.txt', 'w') as file_out:
+    with open(trim_dir + book_id + '_trimmed.txt', 'w', encoding="UTF-8") as file_out:
         file_out.write(trimmed_contents)
 
-def preprocess_ebook(book_id, stopwords, stemmer, numeric=False, raw_dir: str='', 
-                     trim_dir: str='', data_dir: str=''):
-    with open(trim_dir + book_id + '_trimmed.txt', 'r') as file_in:
+def preprocess_ebook(book_id, stopwords_set, stemmer, numeric=False, trim_dir: str='', data_dir: str=''):
+    with open(trim_dir + book_id + "_trimmed.txt", 'r', encoding="UTF-8") as file_in:
         contents = file_in.read()
     
     convert_to_ascii = unidecode(contents)
@@ -52,11 +50,14 @@ def preprocess_ebook(book_id, stopwords, stemmer, numeric=False, raw_dir: str=''
     pattern1 = f'[^{regex}\' ]|(?<![{regex}])\'|\'(?![{regex}])'
     tokens = re.sub(pattern1, ' ', convert_to_ascii.lower()).split()
     
-    terms = [stemmer.stem(word) for word in tokens if word not in stopwords]
+    terms = [stemmer.stemWord(word) for word in tokens if word not in stopwords_set]
 
-    with open(data_dir + book_id + '_processed.txt', 'w') as file_out:
+    with open(data_dir + book_id + "_processed.txt", 'w') as file_out:
         file_out.write(' '.join(terms))
 
+def preprocess_pipeline(book_id, stopwords_set, stemmer, numeric=False, raw_dir: str='', trim_dir: str='', data_dir: str=''):
+    trim_ebook(book_id, raw_dir, trim_dir)
+    preprocess_ebook(book_id, stopwords_set, stemmer, numeric, trim_dir, data_dir)
 
 if __name__ == '__main__':
     # unpickle_file('bookshelf_categories')
@@ -64,7 +65,7 @@ if __name__ == '__main__':
 
     # nltk.download('stopwords')
     stopwords_set = set(stopwords.words('english'))
-    stemmer = SnowballStemmer('english')
+    stemmer = Stemmer('english')
 
-    trim_ebook('PG10000')
-    preprocess_ebook('PG10000', stopwords_set, stemmer)
+    trim_ebook('PG2')
+    preprocess_ebook('PG2', stopwords_set, stemmer)
