@@ -1,12 +1,25 @@
 import os
+import sys
+
 from flask import Flask
 import firebase_admin
 from firebase_admin import firestore, credentials
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Use a service account.
-cred = credentials.Certificate('credentials.json')
+if os.getenv("ENV") == "DEV":
+    print("Running in Dev")
+    cred = credentials.Certificate('credentials.json')
+    fb_app = firebase_admin.initialize_app(cred)
+elif os.getenv("ENV") == "PROD":
+    print("Running in Production")
+    fb_app = firebase_admin.initialize_app()
+else:
+    print("ERROR IN ENVIRONMENT VARIABLES")
+    sys.exit(1)
 
-fb_app = firebase_admin.initialize_app(cred)
 db = firestore.client()
 
 app = Flask(__name__)
