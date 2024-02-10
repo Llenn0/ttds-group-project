@@ -2,7 +2,6 @@ import concurrent.futures
 import pickle
 import os
 
-import numpy as np
 from nltk.corpus import stopwords
 from Stemmer import Stemmer
 
@@ -78,62 +77,12 @@ def fetch_token_vocab(fname: str, stemmer: Stemmer):
     vocab = set(tokens)
     return vocab
 
-def build_book_index(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: tuple[dict]):
-    # todo: variable dtype
-    with open(fname, 'r') as f:
-        tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
-                  if token not in stopwords_set]
-    vocab = set(tokens)
-    token_num = len(tokens)
-    tokens_arr = np.array(tokens, dtype=np.uint16)
-    for token in vocab:
-        token_occurences = np.where(tokens_arr == token)[0]
-        # next_token_pos = token_occurences + 1
-        # out_of_bound = next_token_pos >= token_num
-        # next_token_pos[out_of_bound] = 0
-        # next_tokens = tokens_arr[next_token_pos]
-        # next_tokens[out_of_bound] = 0
-        # index[token][book_id] = (token_occurences.astype(np.uint16), next_tokens)
-        index[token][book_id] = token_occurences.astype(np.uint16)
-
-def build_full_index():
-    with open("valid_books.pkl", "rb") as f:
-        _, _, valid_books = pickle.load(f)
-    with open("all_tokens.pkl", "rb") as f:
-        _, _, all_tokens = pickle.load(f)
-    all_tokens.insert(0, '') # dummy token
-    token_index_dict = dict((token, i) for i, token in enumerate(all_tokens))
-    index = tuple(dict() for _ in all_tokens)
-    book_path_template = token_dir + "PG%d_tokens.txt"
-
-    complete_counter = 0
-    failed_jobs = []
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        jobs = {
-            pool.submit(
-                build_book_index, book_path_template % book_id, book_id, stemmer, token_index_dict, index)
-                : book_id for book_id in valid_books
-            }
-        
-        for job in concurrent.futures.as_completed(jobs):
-            book_id = jobs[job]
-            try:
-                job.result()
-            except Exception as e:
-                raise e
-                failed_jobs.append(book_id)
-            complete_counter += 1
-            print(f"Finished building index for {complete_counter} books...", end="\r")
-    
-    print(f"\n{len(failed_jobs)}/{len(jobs)} failures while building index")
-    
-    with open("index.pkl", "wb") as f:
-        pickle.dump(index, f)
-
-def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int=0):
+def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int=0) -> tuple:
     try:
         with open("all_tokens.pkl", 'rb') as f:
             k_, offset_, all_tokens = pickle.load(f)
+            if k < 0:
+                k = k_
             assert k == k_ and offset == offset_
     except:
         all_tokens_set = set()
@@ -143,6 +92,8 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
         list_length = len(book_list)
         if offset >= list_length:
             return
+        if k < 0:
+            k = list_length
         book_list = set(book_list[offset:min(list_length, offset + k)])
         book_path_template = token_dir + "PG%d_tokens.txt"
 
@@ -169,7 +120,7 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
         print(f"\n{len(failed_jobs)}/{len(jobs)} token fetching jobs failed")
 
         valid_books = book_list - set(failed_jobs)
-        all_tokens = sorted(all_tokens_set)
+        all_tokens = tuple(sorted(all_tokens_set))
 
         with open("valid_books.pkl", "wb") as f:
             pickle.dump((k, offset, valid_books), f)
