@@ -1,6 +1,8 @@
 import concurrent.futures
 import pickle
 import os
+import glob
+import traceback
 
 from nltk.corpus import stopwords
 from Stemmer import Stemmer
@@ -71,11 +73,8 @@ def process_first_k_books(load_from: str="english_books.txt", k: int=500, offset
     print(f"{len(failed_jobs)}/{len(jobs)} pre-processing jobs failed:\n- " + '\n- '.join(failed_jobs))
 
 def fetch_token_vocab(fname: str, stemmer: Stemmer):
-    with open(fname, 'r') as f:
-        tokens = [stemmer.stemWord(token) for token in f.read().splitlines() 
-                  if token not in stopwords_set]
-    vocab = set(tokens)
-    return vocab
+    with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
+        return set(stemmer.stemWord(token) for token in f.read().splitlines() if token not in stopwords_set)
 
 def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int=0) -> tuple:
     try:
@@ -86,9 +85,12 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
             assert k == k_ and offset == offset_
     except:
         all_tokens_set = set()
-        with open(load_from, "rb") as f:
-            book_list = [book_id.strip() for book_id in f.readlines()]
-        book_list = [int(book_id[2:]) for book_id in book_list if book_id]
+        if load_from:
+            with open(load_from, "rb") as f:
+                book_list = [book_id.strip() for book_id in f.readlines()]
+            book_list = [int(book_id[2:]) for book_id in book_list if book_id]
+        else:
+            book_list = [int(filename.split('_')[0][2:]) for filename in glob.glob("PG*.txt", root_dir=token_dir)]
         list_length = len(book_list)
         if offset >= list_length:
             return
@@ -100,6 +102,7 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
         complete_counter = 0
         failed_jobs = []
         
+        print("Start fetching tokens")
         with concurrent.futures.ThreadPoolExecutor() as pool:
             jobs = {
                 pool.submit(
@@ -112,15 +115,17 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
                 try:
                     all_tokens_set.update(job.result())
                 except Exception as e:
-                    # raise e
+                    with open("log", 'a', encoding="UTF-8") as f:
+                        f.write(f"Fetch token vocab failure at book {book_id}:\n{''.join(traceback.format_exception(e))}\n")
                     failed_jobs.append(book_id)
                 complete_counter += 1
+
                 print(f"Finished fetching tokens in {complete_counter} books...", end="\r")
-        
-        print(f"\n{len(failed_jobs)}/{len(jobs)} token fetching jobs failed")
+            print(f"Finished fetching tokens in {complete_counter} books...", flush=True)
+        print(f"\n{len(failed_jobs)}/{len(jobs)} token fetching jobs failed", flush=True)
 
         valid_books = book_list - set(failed_jobs)
-        all_tokens = tuple(sorted(all_tokens_set))
+        all_tokens = tuple([''] + sorted(all_tokens_set))
 
         with open("valid_books.pkl", "wb") as f:
             pickle.dump((k, offset, valid_books), f)
@@ -130,3 +135,7 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
 
     return all_tokens
 
+def get_all_tokens(path: str="all_tokens.pkl"):
+    with open(path, "rb") as f:
+        _, _, all_tokens = pickle.load(f)
+    return tuple([''] + list(all_tokens))

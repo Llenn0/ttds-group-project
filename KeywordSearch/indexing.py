@@ -1,26 +1,31 @@
 import concurrent.futures
 import pickle
-from typing import Callable
+import os
+import traceback
 
 import numpy as np
 from Stemmer import Stemmer
 
 from KeywordSearch.loader import stopwords_set, token_dir, stemmer
-from KeywordSearch.utils import cast2intarr
+from KeywordSearch.utils import cast2intarr, save_in_batches
+
+class ZeroDict(dict):
+    def __missing__(self, _):
+        return 0
 
 def build_inverted_index(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: tuple[tuple]):
     # todo: variable dtype
-    with open(fname, 'r') as f:
+    with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
         tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
                   if token not in stopwords_set]
-    tokens_arr, tokens_delta = cast2intarr(tokens)
+    tokens_arr = np.array(tokens)
     for token in set(tokens):
-        token_occurences = np.where(tokens_arr == (token - tokens_delta))[0]
-        index[token][book_id] = cast2intarr(token_occurences)
+        token_occurences = np.where(tokens_arr == token)[0]
+        index[token][book_id], _ = cast2intarr(token_occurences, delta_encode=False)
 
 def build_bow_index_alt(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: list[dict]):
     # todo: variable dtype
-    with open(fname, 'r') as f:
+    with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
         tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
                   if token not in stopwords_set]
     vocab_list = sorted(set(tokens))
@@ -31,30 +36,40 @@ def build_bow_index_alt(fname: str, book_id: int, stemmer: Stemmer, token_index_
 def build_bow_index(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: list[tuple]):
     # todo: variable dtype
     with open(fname, 'r') as f:
-        tokens = np.array([token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
-                  if token not in stopwords_set])
+        tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
+                  if token not in stopwords_set]
     vocab_list = sorted(set(tokens))
+    token_arr = np.array(tokens)
     vocab, vocab_delta = cast2intarr(vocab_list)
-    counts, count_delta = cast2intarr([np.sum(vocab == token) for token in vocab_list])
+    counts, count_delta = cast2intarr([np.sum(token_arr == token) for token in vocab_list])
     index[book_id] = (vocab_delta, vocab, count_delta, counts)
 
-def build_full_index(offset: int=0, k: int=-1, index_func: Callable=build_bow_index) -> list:
+def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: str="bow", skip_save: bool=True) -> tuple[list, list]:
+    assert index_type in ("bow", "inverted"), "index_type must be \"bow\" or \"inverted\""
+
     with open("valid_books.pkl", "rb") as f:
         _, _, valid_books = pickle.load(f)
     with open("all_tokens.pkl", "rb") as f:
         _, _, all_tokens = pickle.load(f)
 
-    if isinstance(index_func, str):
-        index_func = {}
-    all_tokens = tuple([''] + list(all_tokens)) # add a dummy token
-    token_index_dict = dict((token, i) for i, token in enumerate(all_tokens))
-    index = list(dict() for _ in all_tokens)
+    all_tokens = tuple(all_tokens)
+    token_index_dict = ZeroDict((token, i) for i, token in enumerate(all_tokens))
     book_path_template = token_dir + "PG%d_tokens.txt"
     
     list_length = len(valid_books)
     if offset >= list_length:
         return
     valid_books = sorted(valid_books)[offset:min(list_length, offset + k)]
+
+    # todo: switch between two modes
+    if index_type == "bow":
+        index = [None] * (np.max(valid_books) + 1)
+        index_func = build_bow_index
+        index_size = len(valid_books)
+    else:
+        index = tuple(dict() for _ in all_tokens)
+        index_func = build_inverted_index
+        index_size = len(all_tokens)
 
     complete_counter = 0
     failed_jobs = []
@@ -70,14 +85,20 @@ def build_full_index(offset: int=0, k: int=-1, index_func: Callable=build_bow_in
             try:
                 job.result()
             except Exception as e:
-                raise e
+                with open("log", 'a', encoding="UTF-8") as f:
+                    f.write(f"Create index failure at book {book_id}:\n{''.join(traceback.format_exception(e))}\n")
                 failed_jobs.append(book_id)
             complete_counter += 1
+
             print(f"Finished building index for {complete_counter} books...", end="\r")
+        print(f"Finished building index for {complete_counter} books...", flush=True)
+    print(f"{len(failed_jobs)}/{len(jobs)} failures while building index", flush=True)
+    del jobs
+
+    try:
+        save_in_batches(batch_size, index_type, index_size, index)
+    except Exception as e:
+        print(e)
+        print("Pickle Failure")
     
-    print(f"\n{len(failed_jobs)}/{len(jobs)} failures while building index")
-    
-    with open("index.pkl", "wb") as f:
-        pickle.dump(index, f)
-    
-    return tuple(index), valid_books
+    return index, valid_books
