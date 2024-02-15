@@ -1,6 +1,6 @@
 import os
 import sys
-
+import pickle
 from flask import Flask
 import firebase_admin
 from firebase_admin import firestore, credentials
@@ -21,9 +21,25 @@ else:
     sys.exit(1)
 
 db = firestore.client()
+coll = db.collection('index')
 
 app = Flask(__name__)
 
+# Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
+def create_index():
+    with open("inverted_index.pkl", "rb") as f:
+        ebooks = pickle.load(f)
+        for i in range(0, len(ebooks)):
+            if ebooks[i] != {}:
+                data_array = []
+                for (k, v) in ebooks[i].items():
+                    item_string = f"{str(k)}:"
+                    for hit in v:
+                        item_string += f" {str(hit)}"
+                    data_array.append(item_string)
+                data = {"appears_in": data_array}
+                print(f"Writing data for doc id {i}")
+                coll.document(str(i)).set(data)
 @app.route('/')
 def hello_world():
     return 'Hello, World!'
@@ -32,19 +48,19 @@ def hello_world():
 def hello():
     return 'world!'
 
-@app.route('/getdocs')
-def docs():
-    index = db.collection("index")
-    docs = index.stream()
-    response = ""
-
-    for doc in docs:
-        response += (str(doc.id) + "<br>")
-        for hits in doc.to_dict().values():
-            for hit in hits:
-                response += (hit + "<br>")
-        response += "<br>"
-    return response
+# @app.route('/getdocs')
+# def docs():
+#     index = db.collection("index")
+#     docs = index.stream()
+#     response = ""
+#
+#     for doc in docs:
+#         response += (str(doc.id) + "<br>")
+#         for hits in doc.to_dict().values():
+#             for hit in hits:
+#                 response += (hit + "<br>")
+#         response += "<br>"
+#     return response
 
 
 
