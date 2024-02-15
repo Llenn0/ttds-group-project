@@ -2,6 +2,7 @@ import concurrent.futures
 import pickle
 import os
 import traceback
+import gc
 
 import numpy as np
 from Stemmer import Stemmer
@@ -44,7 +45,7 @@ def build_bow_index(fname: str, book_id: int, stemmer: Stemmer, token_index_dict
     counts, count_delta = cast2intarr([np.sum(token_arr == token) for token in vocab_list])
     index[book_id] = (vocab_delta, vocab, count_delta, counts)
 
-def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: str="bow", skip_save: bool=True) -> tuple[list, list]:
+def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: str="bow", prefix: str="", unsafe_pickle: bool=False, skip_pickle: bool=False) -> tuple[list, list]:
     assert index_type in ("bow", "inverted"), "index_type must be \"bow\" or \"inverted\""
 
     with open("valid_books.pkl", "rb") as f:
@@ -67,7 +68,7 @@ def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: 
         index_func = build_bow_index
         index_size = len(valid_books)
     else:
-        index = tuple(dict() for _ in all_tokens)
+        index = [dict() for _ in all_tokens]
         index_func = build_inverted_index
         index_size = len(all_tokens)
 
@@ -89,16 +90,25 @@ def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: 
                     f.write(f"Create index failure at book {book_id}:\n{''.join(traceback.format_exception(e))}\n")
                 failed_jobs.append(book_id)
             complete_counter += 1
-
+            if (complete_counter % 1000 is 0):
+                gc.collect()
             print(f"Finished building index for {complete_counter} books...", end="\r")
+        
+        # concurrent.futures.wait(jobs)
         print(f"Finished building index for {complete_counter} books...", flush=True)
     print(f"{len(failed_jobs)}/{len(jobs)} failures while building index", flush=True)
-    del jobs
 
-    try:
-        save_in_batches(batch_size, index_type, index_size, index)
-    except Exception as e:
-        print(e)
-        print("Pickle Failure")
+    done_jobs = set(jobs.values())
+    del jobs
+    gc.collect()
     
+    if not skip_pickle:
+        try:
+            with open(f"done_jobs_{prefix}.pkl", "wb") as f:
+                pickle.dump(done_jobs, f)
+            save_in_batches(batch_size, index_type, index, prefix, index_size, unsafe_pickle)
+        except Exception as e:
+            print(e)
+            print("Pickle Failure")
+        gc.collect()
     return index, valid_books

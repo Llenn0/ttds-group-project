@@ -1,6 +1,8 @@
 from typing import Iterable
 import pickle
+import gc
 
+import h5py
 import numpy as np
 
 def cast2intarr(x: Iterable, delta_encode: bool=True, *args, **kwargs):
@@ -43,23 +45,38 @@ class deltazip:
     def __next__(self):
         return self.data.__next__()
 
-def save_in_batches(batch_size: int, index_type: str, index: Iterable[dict], index_size: int=None):
+def pickle_save(filename: str, obj: object, unsafe: bool=False):
+    if unsafe:
+        gc.disable()
+    with open(filename, "wb") as f:
+        pickle.dump(obj, f, protocol=pickle.HIGHEST_PROTOCOL)
+    if unsafe:
+        gc.enable()
+
+def save_inv_index_HDF5(filename: str, index: Iterable[dict], **kwargs):
+    with h5py.File(filename, 'w') as f:
+        for i, entry in enumerate(index):
+            group = f.create_group(str(i))
+            for book_id, occurrences in entry.items():
+                group.create_dataset(str(book_id), data=occurrences, **kwargs)
+
+def save_in_batches(batch_size: int, index_type: str, index: Iterable[dict], prefix: str, 
+                    index_size: int=None, unsafe_pickle: bool=False):
+    gc.collect()
     if batch_size <= 0:
-        with open(f"index/{index_type}_index.pkl", "wb") as f:
-            pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle_save(f"index/{prefix}_{index_type}_index.pkl", index, unsafe_pickle)
     else:
         if index_size == None:
             index_size = len(index)
         batches = index_size // batch_size
-        filename = f"index/{index_type}_%0{len(str(batches))}d.pkl"
+        filename = f"index/{prefix}_{index_type}_%0{len(str(batches))}d.pkl"
         end = 0
         i = -1
 
         for i in range(batches):
             start = i * batch_size
             end = min(start + batch_size, index_size)
-            with open(filename %(i), "wb") as f:
-                pickle.dump(index[start:end], f, protocol=pickle.HIGHEST_PROTOCOL)
+            pickle_save(filename %(i), index[start:end], unsafe_pickle)
+            gc.collect()
         
-        with open(filename %(i+1), "wb") as f:
-            pickle.dump(index[end:], f, protocol=pickle.HIGHEST_PROTOCOL)
+        pickle_save(filename %(i+1), index[start:end], unsafe_pickle)
