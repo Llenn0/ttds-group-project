@@ -52,8 +52,8 @@ on:
 
 env:
   PROJECT_ID: moonlit-oven-412316 
-  SERVICE: hello-world
-  REGION: europe-west2
+  SERVICE: ttds-gutenberg
+  REGION: europe-west4
 
 jobs:
   deploy:
