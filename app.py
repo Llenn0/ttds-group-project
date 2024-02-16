@@ -5,6 +5,7 @@ from flask import Flask
 import firebase_admin
 from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
+from run_semantic import SemanticSearch
 
 load_dotenv()
 
@@ -24,6 +25,7 @@ db = firestore.client()
 coll = db.collection('index')
 
 app = Flask(__name__)
+searcher = SemanticSearch()
 
 # Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
 def create_index():
@@ -47,6 +49,11 @@ def hello_world():
 @app.route('/hello')
 def hello():
     return 'world!'
+
+@app.route('/semantic')
+def semantic_search():
+    results = searcher.run_search_modified("the jungle book")
+    return results
 
 # @app.route('/getdocs')
 # def docs():

@@ -103,3 +103,26 @@ class SemanticSearch:
                     print("\t{:.3f}\t{}".format(
                         hit["score"], self.corpus_sentences[hit["corpus_id"]]))
         print("\n\n========\n")
+
+    def run_search_modified(self, inp_question):
+        #Search in the index
+        print("Corpus loaded with {} sentences / embeddings"
+              .format(len(self.corpus_sentences)))
+        start_time = time.time()
+        question_embedding = self.model.encode(inp_question)
+
+        # We use hnswlib knn_query method to find the top_k_hits
+        corpus_ids, distances = self.index.knn_query(question_embedding,
+                                                     k=self.top_k_hits)
+
+        # We extract corpus ids and scores for the first query
+        hits = [{"corpus_id": id, "score": 1 - score}
+                for id, score in zip(corpus_ids[0], distances[0])]
+
+        hits = sorted(hits, key=lambda x: x["score"], reverse=True)
+        end_time = time.time()
+
+        output = f"Input question:{inp_question}<br>Results (after {(end_time - start_time):.3f} seconds):<br>"
+        for hit in hits[0:self.top_k_hits]:
+            output += "{} - {:.3f}<br>".format(self.corpus_sentences[hit["corpus_id"]], hit["score"])
+        return output
