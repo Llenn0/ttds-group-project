@@ -3,3 +3,8 @@ credentials.json
 venv
 .idea
 .env
+data/
+inverted_index.pkl
+bookshelves_categories.pkl
+bookshelves_ebooks.pkl
+hnswlib.index

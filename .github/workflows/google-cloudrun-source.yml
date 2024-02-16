@@ -48,7 +48,7 @@ name: Deploy to Cloud Run from Source
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "deploy" ]
 
 env:
   PROJECT_ID: moonlit-oven-412316 
