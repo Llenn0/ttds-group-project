@@ -8,3 +8,4 @@ inverted_index.pkl
 bookshelves_categories.pkl
 bookshelves_ebooks.pkl
 hnswlib.index
+document_embeddings.pkl
