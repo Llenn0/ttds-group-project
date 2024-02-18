@@ -6,6 +6,7 @@ import firebase_admin
 from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
 from run_semantic import SemanticSearch
+from google.cloud import storage
 
 load_dotenv()
 
@@ -25,6 +26,16 @@ db = firestore.client()
 coll = db.collection('index')
 
 app = Flask(__name__)
+
+print("Downloading Semantic Embeddings...")
+storage_client = storage.Client(project='moonlit-oven-412316')
+bucket = storage_client.bucket('ttds-static')
+if not os.path.isfile('document_embeddings.pkl'):
+    blob = bucket.blob('document_embeddings.pkl')
+    blob.download_to_filename("document_embeddings.pkl")
+    print("Semantic Embeddings Downloaded.")
+else:
+    print("Found Semantic Embeddings File")
 searcher = SemanticSearch()
 
 # Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
@@ -52,8 +63,12 @@ def hello():
 
 @app.route('/semantic')
 def semantic_search():
-    results = searcher.run_search_modified("the jungle book")
-    return results
+    search = "the jungle book"
+    results, time = searcher.runSearch(search)
+    res_string = f"Searching for '{search}':<br>Took {time:.3f} seconds<br>"
+    for doc, score in results[:10]:
+        res_string += f"{doc} - {score}<br>"
+    return res_string
 
 # @app.route('/getdocs')
 # def docs():

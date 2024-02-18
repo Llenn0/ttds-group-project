@@ -57,4 +57,4 @@ class SemanticSearch:
         for doc, score in doc_score_pairs[:10]:
             print(score, doc)
 
-        return doc_score_pairs 
+        return doc_score_pairs, end_time - start_time
