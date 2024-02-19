@@ -106,3 +106,5 @@ ENV/
 *_processed.txt
 *_trimmed.txt
 SPGC/*
+index/*
+done_jobs*

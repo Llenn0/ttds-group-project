@@ -1,9 +1,23 @@
 from typing import Iterable
+
 import pickle
 import gc
+import re
+import os
+import glob
+import traceback
+import concurrent.futures
+from collections import defaultdict
 
-import h5py
 import numpy as np
+# import h5py
+
+# def save_inv_index_HDF5(filename: str, index: Iterable[dict], **kwargs):
+#     with h5py.File(filename, 'w') as f:
+#         for i, entry in enumerate(index):
+#             group = f.create_group(str(i))
+#             for book_id, occurrences in entry.items():
+#                 group.create_dataset(str(book_id), data=occurrences, **kwargs)
 
 def cast2intarr(x: Iterable, delta_encode: bool=True, *args, **kwargs):
     delta = np.min(x) if delta_encode else 0
@@ -53,13 +67,6 @@ def pickle_save(filename: str, obj: object, unsafe: bool=False):
     if unsafe:
         gc.enable()
 
-def save_inv_index_HDF5(filename: str, index: Iterable[dict], **kwargs):
-    with h5py.File(filename, 'w') as f:
-        for i, entry in enumerate(index):
-            group = f.create_group(str(i))
-            for book_id, occurrences in entry.items():
-                group.create_dataset(str(book_id), data=occurrences, **kwargs)
-
 def save_in_batches(batch_size: int, index_type: str, index: Iterable[dict], prefix: str, 
                     index_size: int=None, unsafe_pickle: bool=False):
     gc.collect()
@@ -79,4 +86,38 @@ def save_in_batches(batch_size: int, index_type: str, index: Iterable[dict], pre
             pickle_save(filename %(i), index[start:end], unsafe_pickle)
             gc.collect()
         
-        pickle_save(filename %(i+1), index[start:end], unsafe_pickle)
+        pickle_save(filename %(i+1), index[end:], unsafe_pickle)
+
+def fetch_sizes(parts: list[str]):
+    sizes = dict()
+    for part in parts:
+        with open(part, "rb") as f:
+            tmp = pickle.load(f)
+        sizes[part] = len(tmp)
+        gc.collect()
+    return sizes
+
+def measure_sizes(dir: str="index", naming_rule: str=r"part([0-9]+)_inverted_([0-9]+).pkl"):
+    naming_regex = re.compile(naming_rule)
+    index_segments = glob.glob(naming_rule.replace("([0-9]+)", '*'), root_dir=dir)
+    lookup_table = defaultdict(lambda : list())
+    for segment_name in index_segments:
+        match = naming_regex.fullmatch(segment_name)
+        if match:
+            segment_index = match.group(2)
+            lookup_table[segment_index].append(os.path.join(dir, segment_name))
+
+    print(f"{len(lookup_table)} segments to merge")
+    failed_jobs = []
+    complete_counter = 0
+    results = dict()
+    with concurrent.futures.ProcessPoolExecutor() as pool:
+        jobs = {pool.submit(fetch_sizes, segments) : segment_index
+                for segment_index, segments in lookup_table.items()}
+        for job in concurrent.futures.as_completed(jobs):
+            segment_index = jobs[job]
+            results[segment_index] = job.result()
+            complete_counter += 1
+            print(f"Finished measuring size for {complete_counter} segments...", end="\r", flush=True)
+    print("\nAll done")
+    return results

@@ -1,6 +1,8 @@
 import concurrent.futures
 import pickle
 import os
+import gc
+import re
 import glob
 import traceback
 
@@ -29,6 +31,9 @@ def init_module():
     raw_dir = token_dir.replace("tokens", "raw")
     stopwords_set = frozenset(stopwords.words("english"))
     stemmer = Stemmer("english")
+
+    if os.path.exists("log"):
+        os.remove("log")
 
 def process_first_k_books(load_from: str="english_books.txt", k: int=500, offset: int=0):
     global processed_books
@@ -135,7 +140,58 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
 
     return all_tokens
 
-def get_all_tokens(path: str="all_tokens.pkl"):
+def load_segment(path: str):
     with open(path, "rb") as f:
-        _, _, all_tokens = pickle.load(f)
-    return tuple([''] + list(all_tokens))
+        return pickle.load(f)
+        
+def load_merged_index(dir: str="index", save_merged: bool=False):
+    naming_regex = re.compile(r"([0-9]+)_merged.pkl")
+    segments = [[int(naming_regex.fullmatch(filename).group(1)), filename] for filename in glob.glob("*_merged.pkl", root_dir=dir)]
+    segments.sort(key=lambda x: x[0])
+    
+    # Single-threaded version
+    # for i, filename in segments:
+    #     with open(os.path.join(dir, filename), "rb") as f:
+    #         index += list(pickle.load(f))
+    #     gc.collect()
+    #     print(f"Finished loading segment {i}...", end="\r", flush=True)
+    # print("done")
+
+    print(f"{len(segments)} segments to load")
+    complete_counter = 0
+    index_dict = dict()
+    with concurrent.futures.ProcessPoolExecutor() as pool:
+        jobs = {pool.submit(load_segment, os.path.join(dir, filename)) : segment_index
+                for segment_index, filename in segments}
+        for job in concurrent.futures.as_completed(jobs):
+            segment_index = jobs[job]
+            try:
+                index_dict[segment_index] = job.result()
+            except Exception as e:
+                with open("log", 'a', encoding="UTF-8") as f:
+                    f.write(f"Load index failure at segment {segment_index}:\n{''.join(traceback.format_exception(e))}\n")
+            complete_counter += 1
+            if (complete_counter % 100 is 0):
+                gc.collect()
+            print(f"Finished loading {complete_counter} segments...", end="\r", flush=True)
+    
+    index = []
+    complete_counter = 0
+    for _, segment in sorted(index_dict.items(), key=lambda x: x[0]):
+        index.extend(segment)
+        complete_counter += 1
+        if (complete_counter % 100 is 0):
+            gc.collect()
+        print(f"Finished merging {complete_counter} segments...", end="\r", flush=True)
+    
+    del index_dict
+    gc.collect()
+    print("\nGarbage collection done")
+
+    if save_merged:
+        with open(os.path.join(dir, f"full_index.pkl"), "wb") as f:
+            pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
+        print("Saving done")
+
+    print("All done")
+    return index
