@@ -1,7 +1,7 @@
 import os
 import sys
 import pickle
-from flask import Flask
+from flask import Flask, request
 import firebase_admin
 from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
@@ -61,14 +61,17 @@ def hello_world():
 def hello():
     return 'world!'
 
-@app.route('/semantic')
+@app.route('/semantic', methods=["POST"])
 def semantic_search():
-    search = "the jungle book"
-    results, time = searcher.runSearch(search)
-    res_string = f"Searching for '{search}':<br>Took {time:.3f} seconds<br>"
-    for doc, score in results[:10]:
-        res_string += f"{doc} - {score}<br>"
-    return res_string
+    data = request.get_json()
+    search = data["query"]
+    results = searcher.runSearch(search)[:10]
+    results = list(zip(*results))
+    docIds, scores = list(results[0]), list(results[1])
+    for i in range(len(docIds)):
+        docIds[i] = {"id":docIds[i]}
+    res_json = {"docIds":docIds}
+    return res_json
 
 # @app.route('/getdocs')
 # def docs():
