@@ -7,6 +7,7 @@ from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
 from run_semantic import SemanticSearch
 from google.cloud import storage
+from flask_cors import CORS
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ db = firestore.client()
 coll = db.collection('index')
 
 app = Flask(__name__)
+CORS(app)
 
 print("Downloading Semantic Embeddings...")
 storage_client = storage.Client(project='moonlit-oven-412316')
