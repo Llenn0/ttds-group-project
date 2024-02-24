@@ -5,7 +5,7 @@ import numpy as np
 import scipy.sparse
 
 from KeywordSearch import indexing, utils
-from KeywordSearch.loader import stemmer, valid_books, all_tokens
+from KeywordSearch.loader import stemmer, valid_books, all_tokens, stopwords_set
 
 # Path for look-up table for boolean search
 LOOKUP_TABLE_PATH = "../lookup_table.npz"
@@ -63,7 +63,7 @@ def bool_search(query: str, debug: bool=False) -> set:
                 if not_first:
                     valid = token_eval | (all_elems_set - valid) 
                 else:
-                    valid |= (all_elems_set - token_eval)
+                    valid |= (mall_elems_set - token_eval)
                 is_not = False
             else:
                 valid |= token_eval
@@ -144,8 +144,8 @@ def bool_search_atomic(query: str, debug: bool) -> set:
 def phrase_search(words: list[str], index: list[dict] | tuple[dict], debug: bool=False):
     search_result = []
     if debug:
-        print([stemmer.stemWord(word) for word in words if word not in indexing.stopwords_set])
-    word_ids = [token_index_dict[stemmer.stemWord(word)] for word in words if word not in indexing.stopwords_set]
+        print([stemmer.stemWord(word) for word in words if word not in stopwords_set])
+    word_ids = [token_index_dict[stemmer.stemWord(word)] for word in words if word not in stopwords_set]
     index_entries = [index[i] for i in word_ids]
     first = list(set(word_ids))
     intersection = lookup_table[first.pop(), :].indices
