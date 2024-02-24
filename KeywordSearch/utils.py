@@ -114,7 +114,7 @@ def save_in_batches(batch_size: int, index_type: str, index: Iterable[dict], pre
         
         pickle_save(filename %(i+1), index[end:], unsafe_pickle)
 
-def fetch_sizes(parts: list[str]):
+def fetch_sizes(parts):
     sizes = dict()
     for part in parts:
         with open(part, "rb") as f:
