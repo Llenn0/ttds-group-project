@@ -13,7 +13,7 @@ import numpy as np
 import scipy.sparse
 
 try:
-    from tqdm.notebook import tqdm
+    from tqdm import tqdm
     USE_TQDM = True
 except:
     USE_TQDM = False

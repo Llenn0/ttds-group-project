@@ -9,7 +9,7 @@ import re
 import glob
 from collections import defaultdict
 
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import numpy as np
 from Stemmer import Stemmer
 

@@ -5,7 +5,9 @@ import gc
 import re
 import glob
 import traceback
+import time
 
+from tqdm import tqdm
 from nltk.corpus import stopwords
 from Stemmer import Stemmer
 
@@ -167,6 +169,8 @@ def load_segment(path: str):
         return pickle.load(f)
         
 def load_merged_index(dir: str="index", save_merged: bool=False):
+    start_time = time.time()
+
     naming_regex = re.compile(r"([0-9]+)_merged.pkl")
     segments = [[int(naming_regex.fullmatch(filename).group(1)), filename] for filename in glob.glob("*_merged.pkl", root_dir=dir)]
     segments.sort(key=lambda x: x[0])
@@ -185,7 +189,7 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
     with concurrent.futures.ProcessPoolExecutor() as pool:
         jobs = {pool.submit(load_segment, os.path.join(dir, filename)) : segment_index
                 for segment_index, filename in segments}
-        for job in concurrent.futures.as_completed(jobs):
+        for job in tqdm(concurrent.futures.as_completed(jobs), total=len(jobs)):
             segment_index = jobs[job]
             try:
                 index_dict[segment_index] = job.result()
@@ -195,20 +199,28 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
             complete_counter += 1
             if (complete_counter % 100 is 0):
                 gc.collect()
-            print(f"Finished loading {complete_counter} segments...", end="\r", flush=True)
+            # print(f"Finished loading {complete_counter} segments...", end="\r", flush=True)
     
     index = []
     complete_counter = 0
-    for _, segment in sorted(index_dict.items(), key=lambda x: x[0]):
+    for _, segment in tqdm(sorted(index_dict.items(), key=lambda x: x[0]), total=len(index_dict)):
         index.extend(segment)
         complete_counter += 1
         if (complete_counter % 100 is 0):
             gc.collect()
-        print(f"Finished merging {complete_counter} segments...", end="\r", flush=True)
+        # print(f"Finished merging {complete_counter} segments...", end="\r", flush=True)
     
     del index_dict
     gc.collect()
-    print("\nGarbage collection done")
+    run_time = int(time.time() - start_time)
+    h = run_time // 3600
+    h_str = f"{h} hour{'s' if h > 1 else ''} " if h > 0 else ''
+    run_time %= 3600
+    m = run_time // 60
+    m_str = f"{m} minute{'s' if m > 1 else ''}  " if m > 0 else ''
+    run_time %= 60
+    print(f"\nGarbage collection done")
+    print(f"The index took {h_str}{m_str}{run_time} seconds to load")
 
     if save_merged:
         with open(os.path.join(dir, f"full_index.pkl"), "wb") as f:

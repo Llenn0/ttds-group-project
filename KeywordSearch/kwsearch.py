@@ -141,6 +141,36 @@ def bool_search_atomic(query: str, debug: bool) -> set:
         valid = set(valid.tolist())
     return valid, (is_not, is_and, is_or)
 
+def phrase_search(words: list[str], index: list[dict] | tuple[dict], debug: bool=False):
+    search_result = []
+    if debug:
+        print([stemmer.stemWord(word) for word in words if word not in indexing.stopwords_set])
+    word_ids = [token_index_dict[stemmer.stemWord(word)] for word in words if word not in indexing.stopwords_set]
+    index_entries = [index[i] for i in word_ids]
+    first = list(set(word_ids))
+    intersection = lookup_table[first.pop(), :].indices
+    for token_id in first:
+        intersection = np.intersect1d(intersection, lookup_table[token_id, :].indices, assume_unique=True)
+    del first, word_ids
+
+    for docID in intersection:
+        occurs = (entry[docID] for entry in index_entries) # use generator to avoid wasting time on non-matches
+        first = next(occurs)
+        second = next(occurs)
+        matches: np.ndarray = second[first[np.searchsorted(first, second, side="right")-1] == second-1]
+        del first, second
+
+        if matches.shape[0]:
+            for entry in occurs:
+                i = np.searchsorted(matches, entry, side="right")
+                i[i==0] = 1
+                matches = entry[matches[i-1] == entry-1]
+                if not matches.any():
+                    break
+            else:
+                search_result.append(docID)
+    return set(search_result)
+
 # def search(query: str):
 #     # phrases = regex_phrase.finditer(query)
 #     print([token_index_dict[stemmer.stemWord(token)] for token in regex_non_alnum.split(query.casefold()) if token not in indexing.stopwords_set])
