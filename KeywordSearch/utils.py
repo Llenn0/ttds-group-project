@@ -147,3 +147,7 @@ def measure_sizes(dir: str="index", naming_rule: str=r"part([0-9]+)_inverted_([0
             print(f"Finished measuring size for {complete_counter} segments...", end="\r", flush=True)
     print("\nAll done")
     return results
+    
+class ZeroDict(dict):
+    def __missing__(self, _):
+        return 0
