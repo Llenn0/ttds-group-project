@@ -10,6 +10,32 @@ import concurrent.futures
 from collections import defaultdict
 
 import numpy as np
+import scipy.sparse
+
+try:
+    from tqdm.notebook import tqdm
+    USE_TQDM = True
+except:
+    USE_TQDM = False
+
+def construct_bool_table(index: Iterable[dict], all_tokens, valid_books, save_path: str|None=None):
+    table = scipy.sparse.dok_matrix((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
+    length = len(all_tokens)
+    tqdm_iter = enumerate(index[:length])
+    if USE_TQDM:
+        tqdm_iter = tqdm(tqdm_iter, total=length)
+    for token_id, token_dict in tqdm_iter:
+        if token_dict:
+            table[token_id, tuple(token_dict.keys())] = True
+    gc.collect()
+    table = table.tocsr()
+    if save_path is None:
+        return table
+    else:
+        gc.collect()
+        scipy.sparse.save_npz("lookup_table.npz", table, compressed=True)
+        return table
+
 # import h5py
 
 # def save_inv_index_HDF5(filename: str, index: Iterable[dict], **kwargs):
