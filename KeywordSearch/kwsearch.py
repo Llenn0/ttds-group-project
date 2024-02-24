@@ -63,7 +63,7 @@ def bool_search(query: str, debug: bool=False) -> set:
                 if not_first:
                     valid = token_eval | (all_elems_set - valid) 
                 else:
-                    valid |= (mall_elems_set - token_eval)
+                    valid |= (all_elems_set - token_eval)
                 is_not = False
             else:
                 valid |= token_eval
