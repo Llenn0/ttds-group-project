@@ -13,7 +13,7 @@ from tqdm.notebook import tqdm
 import numpy as np
 from Stemmer import Stemmer
 
-from KeywordSearch.loader import stopwords_set, token_dir, stemmer
+from KeywordSearch.loader import stopwords_set, token_dir, stemmer, LOG_PATH
 from KeywordSearch.utils import cast2intarr, save_in_batches
 
 class ZeroDict(dict):
@@ -127,7 +127,7 @@ def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: 
                 #     if addition:
                 #         token_entry.update(addition)
             except Exception as e:
-                with open("log", 'a', encoding="UTF-8") as f:
+                with open(LOG_PATH, 'a', encoding="UTF-8") as f:
                     f.write(f"Create index failure at book {book_id}:\n{''.join(traceback.format_exception(e))}\n")
                 failed_jobs.append(book_id)
             complete_counter += 1
@@ -194,7 +194,7 @@ def merge_index(dir: str="index", naming_rule: str=r"part([0-9]+)_inverted_([0-9
             try:
                 job.result()
             except Exception as e:
-                with open("log", 'a', encoding="UTF-8") as f:
+                with open(LOG_PATH, 'a', encoding="UTF-8") as f:
                     f.write(f"Merge index failure at segment {segment_index}:\n{''.join(traceback.format_exception(e))}\n")
                 failed_jobs.append(segment_index)
             complete_counter += 1

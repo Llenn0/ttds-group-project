@@ -1,34 +1,50 @@
-import pickle
 import re
+import gc
 
 import numpy as np
 import scipy.sparse
 
 from KeywordSearch import indexing, utils
-from KeywordSearch.loader import stemmer, load_token_vocab
+from KeywordSearch.loader import stemmer, valid_books, all_tokens
 
-with open("valid_books.pkl", "rb") as f:
-    _, _, valid_books = pickle.load(f)
+# Path for look-up table for boolean search
+LOOKUP_TABLE_PATH = "lookup_table.npz"
 
-all_tokens = load_token_vocab(k=-1)
-token_index_dict: dict[str, int] = indexing.ZeroDict((token, i) for i, token in enumerate(all_tokens))
-all_tokens_set: set[str] = set(all_tokens)
-book_index: np.ndarray[int]
-book_index, _ = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)
 
-regex_phrase = re.compile(r"\"[\w\s]\"")
-regex_non_alnum = re.compile(r"[^A-Za-z0-9.]")
-regex_bracket = re.compile(r"\((.+)\)( +(?:NOT|AND|OR))?")
-regex_bool_op = re.compile(r"(NOT|AND|OR)")
+# Sparse look-up table aids boolean search
+lookup_table: scipy.sparse.csr_matrix | None
+if valid_books and all_tokens:
+    lookup_table = scipy.sparse.load_npz(LOOKUP_TABLE_PATH)
+else:
+    lookup_table = None
 
-lookup_table: scipy.sparse.csr_matrix = scipy.sparse.load_npz("lookup_table.npz")
+# Pre-compiled regular expressions for parsing boolean queries
+regex_phrase: re.Pattern                = re.compile(r"\"[\w\s]\"")
+regex_non_alnum: re.Pattern             = re.compile(r"[^A-Za-z0-9.]")
+regex_bracket: re.Pattern               = re.compile(r"\((.+)\)( +(?:NOT|AND|OR))?")
+regex_bool_op: re.Pattern               = re.compile(r"(NOT|AND|OR)")
 
-operators = frozenset(("NOT", "AND", "OR"))
+# Frozen set of boolean search operators
+bool_ops = frozenset(("NOT", "AND", "OR"))
 
-all_elems_list = list(range(lookup_table.shape[1]))
-all_elems_set = frozenset(all_elems_list)
-all_elems_arr = np.array(all_elems_list, dtype=np.int32)
-del all_elems_list
+# Other global variables that are expensive to generate
+token_index_dict: dict[str, int]        = indexing.ZeroDict((token, i) for i, token in enumerate(all_tokens))
+all_tokens_set: set[str]                = set(all_tokens)
+book_index: np.ndarray[int]             = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)[0]
+all_elems_set: set[int]                 = frozenset(range(lookup_table.shape[1]))
+all_elems_arr: np.ndarray[np.int32]     = np.arange(lookup_table.shape[1], dtype=np.int32)
+
+# Garbage collection
+gc.collect()
+
+def update_index(valid_books, all_tokens):
+    global token_index_dict, all_tokens_set, book_index, all_elems_set, all_elems_arr
+    token_index_dict = indexing.ZeroDict((token, i) for i, token in enumerate(all_tokens))
+    all_tokens_set = set(all_tokens)
+    book_index = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)[0]
+    all_elems_set = frozenset(range(lookup_table.shape[1]))
+    all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
+    gc.collect()
 
 def bool_search(query: str, debug: bool=False) -> set:
     if debug:
@@ -79,7 +95,7 @@ def bool_search_atomic(query: str, debug: bool) -> set:
     not_first = False
     valid = []
     for token in tokens:
-        if token in operators:
+        if token in bool_ops:
             if token == "OR":
                 is_or = True
                 if is_not: not_first = True

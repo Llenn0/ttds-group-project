@@ -11,8 +11,14 @@ from Stemmer import Stemmer
 
 from Preprocessing import preprocess_pipeline
 
+VALID_BOOKS_PATH = "valid_books.pkl"
+ALL_TOKENS_PATH = "all_tokens.pkl"
+LOG_PATH = "kwsearch.log"
+print("Please ignore the syntax warnings as small integers in CPython are singletons")
+print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
+
 def init_module():
-    global processed_books, raw_dir, token_dir, stopwords_set, stemmer
+    global processed_books, raw_dir, token_dir, stopwords_set, stemmer, valid_books, all_tokens, tokens_fetched
 
     try:
         with open("processed_books.pkl", 'rb') as f:
@@ -32,8 +38,24 @@ def init_module():
     stopwords_set = frozenset(stopwords.words("english"))
     stemmer = Stemmer("english")
 
-    if os.path.exists("log"):
-        os.remove("log")
+    if os.path.exists(VALID_BOOKS_PATH):
+        with open(VALID_BOOKS_PATH, "rb") as f:
+            k_vb, offset_vb, valid_books = pickle.load(f)
+    else:
+        k_vb = offset_vb = -1
+        valid_books = set()
+    
+    if os.path.exists(ALL_TOKENS_PATH):
+        with open(ALL_TOKENS_PATH, "rb") as f:
+            k_at, offset_at, all_tokens = pickle.load(f)
+    else:
+        k_at = offset_at = -1
+        all_tokens = tuple()
+    
+    tokens_fetched = all(val >= 0 for val in (k_vb, offset_vb, k_at, offset_at))
+
+    if os.path.exists(LOG_PATH) and os.path.isfile(LOG_PATH):
+        os.remove(LOG_PATH)
 
 def process_first_k_books(load_from: str="english_books.txt", k: int=500, offset: int=0):
     global processed_books
@@ -120,7 +142,7 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
                 try:
                     all_tokens_set.update(job.result())
                 except Exception as e:
-                    with open("log", 'a', encoding="UTF-8") as f:
+                    with open(LOG_PATH, 'a', encoding="UTF-8") as f:
                         f.write(f"Fetch token vocab failure at book {book_id}:\n{''.join(traceback.format_exception(e))}\n")
                     failed_jobs.append(book_id)
                 complete_counter += 1
@@ -168,7 +190,7 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
             try:
                 index_dict[segment_index] = job.result()
             except Exception as e:
-                with open("log", 'a', encoding="UTF-8") as f:
+                with open(LOG_PATH, 'a', encoding="UTF-8") as f:
                     f.write(f"Load index failure at segment {segment_index}:\n{''.join(traceback.format_exception(e))}\n")
             complete_counter += 1
             if (complete_counter % 100 is 0):
