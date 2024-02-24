@@ -1,4 +1,14 @@
-# Byte-compiled / optimized / DLL files
+.gitignore
+credentials.json
+venv
+.idea
+.env
+data/
+inverted_index.pkl
+bookshelves_categories.pkl
+bookshelves_ebooks.pkl
+hnswlib.index
+document_e# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
