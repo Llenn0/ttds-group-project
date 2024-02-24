@@ -118,3 +118,4 @@ ENV/
 SPGC/*
 index/*
 done_jobs*
+*.log
