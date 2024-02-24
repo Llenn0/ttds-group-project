@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from run_semantic import SemanticSearch
 from google.cloud import storage
 from flask_cors import CORS
-from KeywordSearch.kwsearch import bool_search
 
 load_dotenv()
 
@@ -55,6 +54,7 @@ else:
     print("Found All Tokens File")
 
 searcher = SemanticSearch()
+from KeywordSearch.kwsearch import bool_search
 
 # Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
 def create_index():
