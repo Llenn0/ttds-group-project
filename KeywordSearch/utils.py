@@ -18,7 +18,7 @@ try:
 except:
     USE_TQDM = False
 
-def construct_bool_table(index: Iterable[dict], all_tokens, valid_books, save_path: str|None=None):
+def construct_bool_table(index: Iterable[dict], all_tokens, valid_books, save_path):
     table = scipy.sparse.dok_matrix((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
     length = len(all_tokens)
     tqdm_iter = enumerate(index[:length])
