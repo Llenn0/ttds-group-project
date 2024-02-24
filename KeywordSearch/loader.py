@@ -8,6 +8,7 @@ import traceback
 import time
 
 from tqdm import tqdm
+import nltk
 from nltk.corpus import stopwords
 from Stemmer import Stemmer
 
@@ -19,6 +20,8 @@ LOG_PATH = "kwsearch.log"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
 print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
 
+print("Downloading stopwords...")
+nltk.download('stopwords')
 def init_module():
     global processed_books, raw_dir, token_dir, stopwords_set, stemmer, valid_books, all_tokens, tokens_fetched
 
