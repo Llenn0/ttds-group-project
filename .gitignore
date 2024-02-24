@@ -12,6 +12,9 @@ document_e# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+document_embeddings.pkl
+all_tokens.pkl
+lookup_table.npz
 
 # C extensions
 *.so
