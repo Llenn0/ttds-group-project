@@ -28,7 +28,7 @@ regex_bool_op: re.Pattern               = re.compile(r"(NOT|AND|OR)")
 bool_ops = frozenset(("NOT", "AND", "OR"))
 
 # Other global variables that are expensive to generate
-token_index_dict: dict[str, int]        = indexing.ZeroDict((token, i) for i, token in enumerate(all_tokens))
+token_index_dict: dict[str, int]        = utils.ZeroDict((token, i) for i, token in enumerate(all_tokens))
 all_tokens_set: set[str]                = set(all_tokens)
 book_index: np.ndarray[int]             = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)[0]
 all_elems_set: set[int]                 = frozenset(range(lookup_table.shape[1]))
@@ -39,7 +39,7 @@ gc.collect()
 
 def update_index(valid_books, all_tokens):
     global token_index_dict, all_tokens_set, book_index, all_elems_set, all_elems_arr
-    token_index_dict = indexing.ZeroDict((token, i) for i, token in enumerate(all_tokens))
+    token_index_dict = utils.ZeroDict((token, i) for i, token in enumerate(all_tokens))
     all_tokens_set = set(all_tokens)
     book_index = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)[0]
     all_elems_set = frozenset(range(lookup_table.shape[1]))
