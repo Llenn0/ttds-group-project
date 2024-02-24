@@ -30,9 +30,10 @@ all_elems_set = frozenset(all_elems_list)
 all_elems_arr = np.array(all_elems_list, dtype=np.int32)
 del all_elems_list
 
-def bool_search(query: str) -> set:
-    # print(regex_bracket.split(query))
-    tokens = (bool_search_atomic(token) for token in regex_bracket.split(query) if token)
+def bool_search(query: str, debug: bool=False) -> set:
+    if debug:
+        print(regex_bracket.split(query))
+    tokens = (bool_search_atomic(token, debug) for token in regex_bracket.split(query) if token)
     is_not = is_and = is_or = False
     not_first = False
     valid, (is_not, is_and, is_or) = next(tokens)
@@ -65,11 +66,12 @@ def bool_search(query: str) -> set:
             valid -= token_eval
         else:
             print("Grammar error?")
-    return valid
+    return valid, (is_not, is_and, is_or)
 
-def bool_search_atomic(query: str) -> set:
+def bool_search_atomic(query: str, debug: bool) -> set:
+    if '(' in query:
+        return bool_search(query, debug)
     query = query.strip()
-    # print(query)
     if not query:
         return set(), (False, False, False)
     tokens = [token for token in regex_bool_op.split(query) if token]
