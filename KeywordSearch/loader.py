@@ -197,7 +197,7 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
                 with open(LOG_PATH, 'a', encoding="UTF-8") as f:
                     f.write(f"Load index failure at segment {segment_index}:\n{''.join(traceback.format_exception(e))}\n")
             complete_counter += 1
-            if (complete_counter % 100 == 0):
+            if (complete_counter % 100 is 0):
                 gc.collect()
             # print(f"Finished loading {complete_counter} segments...", end="\r", flush=True)
     
@@ -206,7 +206,7 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
     for _, segment in tqdm(sorted(index_dict.items(), key=lambda x: x[0]), total=len(index_dict)):
         index.extend(segment)
         complete_counter += 1
-        if (complete_counter % 100 == 0):
+        if (complete_counter % 100 is 0):
             gc.collect()
         # print(f"Finished merging {complete_counter} segments...", end="\r", flush=True)
     
