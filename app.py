@@ -88,9 +88,7 @@ def semantic_search():
     results = searcher.runSearch(search)
     results = list(zip(*results))
     docIds, scores = list(results[0]), list(results[1])
-    for i in range(len(docIds)):
-        docIds[i] = {"id":docIds[i]}
-    res_json = {"docIds":docIds}
+    res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
     return res_json
 
 @app.route('/boolean', methods=["POST"])
@@ -99,7 +97,7 @@ def boolean_search():
     search = data["query"]
     docIds, _ = bool_search(search)
 
-    res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
+    res_json = {"docIds" : [{"id" : "PG"+docId} for docId in docIds]}
     return res_json
 
 # @app.route('/getdocs')
