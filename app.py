@@ -39,16 +39,16 @@ if not os.path.isfile('document_embeddings.pkl'):
 else:
     print("Found Semantic Embeddings File")
 
-if not os.path.isfile('lookup_table.npz'):
+if not os.path.isfile('KeywordSearch/lookup_table.npz'):
     blob = bucket.blob('lookup_table.npz')
-    blob.download_to_filename("lookup_table.npz")
+    blob.download_to_filename("KeywordSearch/lookup_table.npz")
     print("Lookup Table Downloaded.")
 else:
     print("Found Lookup Table File")
 
-if not os.path.isfile('all_tokens.pkl'):
+if not os.path.isfile('KeywordSearch/all_tokens.pkl'):
     blob = bucket.blob('all_tokens.pkl')
-    blob.download_to_filename("all_tokens.pkl")
+    blob.download_to_filename("KeywordSearch/all_tokens.pkl")
     print("All Tokens Downloaded.")
 else:
     print("Found All Tokens File")
