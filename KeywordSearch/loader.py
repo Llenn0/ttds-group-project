@@ -14,8 +14,8 @@ from Stemmer import Stemmer
 
 from Preprocessing import preprocess_pipeline
 
-VALID_BOOKS_PATH = "valid_books.pkl"
-ALL_TOKENS_PATH = "all_tokens.pkl"
+VALID_BOOKS_PATH = "KeywordSearch/valid_books.pkl"
+ALL_TOKENS_PATH = "KeywordSearch/all_tokens.pkl"
 LOG_PATH = "kwsearch.log"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
 print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
