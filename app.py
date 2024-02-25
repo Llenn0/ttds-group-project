@@ -54,6 +54,8 @@ else:
     print("Found All Tokens File")
 
 searcher = SemanticSearch()
+import KeywordSearch.loader as loader
+loader.init_module()
 from KeywordSearch.kwsearch import bool_search
 
 # Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
