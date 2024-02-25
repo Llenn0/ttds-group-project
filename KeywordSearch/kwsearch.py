@@ -8,7 +8,7 @@ from KeywordSearch import utils
 from KeywordSearch.loader import stemmer, valid_books, all_tokens, stopwords_set
 
 # Path for look-up table for boolean search
-LOOKUP_TABLE_PATH = "lookup_table.npz"
+LOOKUP_TABLE_PATH = "KeywordSearch/lookup_table.npz"
 
 
 # Sparse look-up table aids boolean search
