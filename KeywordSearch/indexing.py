@@ -14,11 +14,7 @@ import numpy as np
 from Stemmer import Stemmer
 
 from KeywordSearch.loader import stopwords_set, token_dir, stemmer, LOG_PATH
-from KeywordSearch.utils import cast2intarr, save_in_batches
-
-class ZeroDict(dict):
-    def __missing__(self, _):
-        return 0
+from KeywordSearch.utils import cast2intarr, save_in_batches, ZeroDict
 
 def build_inverted_index(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: list[dict]):
     with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:

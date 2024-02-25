@@ -97,9 +97,7 @@ def boolean_search():
     search = data["query"]
     docIds, _ = bool_search(search)
 
-    for i in range(len(docIds)):
-        docIds[i] = {"id":docIds[i]}
-    res_json = {"docIds":docIds}
+    res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
     return res_json
 
 # @app.route('/getdocs')
