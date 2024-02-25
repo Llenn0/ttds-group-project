@@ -31,8 +31,8 @@ bool_ops = frozenset(("NOT", "AND", "OR"))
 token_index_dict: dict[str, int]        = indexing.ZeroDict((token, i) for i, token in enumerate(all_tokens))
 all_tokens_set: set[str]                = set(all_tokens)
 book_index: np.ndarray[int]             = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)[0]
-all_elems_set: set[int]                 = frozenset(range(lookup_table.shape[1]))
-all_elems_arr: np.ndarray[np.int32]     = np.arange(lookup_table.shape[1], dtype=np.int32)
+all_elems_set: set[int]                 = frozenset(valid_books)
+all_elems_arr: np.ndarray[np.int32]     = np.array(sorted(valid_books), dtype=np.int32)
 
 # Garbage collection
 gc.collect()
@@ -51,37 +51,29 @@ def bool_search(query: str, debug: bool=False) -> set:
         print(regex_bracket.split(query))
     tokens = (bool_search_atomic(token, debug) for token in regex_bracket.split(query) if token)
     is_not = is_and = is_or = False
-    not_first = False
     valid, (is_not, is_and, is_or) = next(tokens)
     for token_eval, (is_not_, is_and_, is_or_) in tokens:
-        is_not |= is_not_; is_and |= is_and_; is_or |= is_or_
         if isinstance(token_eval, list):
+            is_not = is_not_; is_and = is_and_; is_or = is_or_
             continue
-        # print(f"Parse: {len(token_eval)} {'OR' if is_or else ''} {'AND' if is_and else ''} {'NOT' if is_not else ''}")
         if is_or:
             if is_not:
-                if not_first:
-                    valid = token_eval | (all_elems_set - valid) 
-                else:
-                    valid |= (all_elems_set - token_eval)
-                is_not = False
+                valid |= (all_elems_set - token_eval)
             else:
                 valid |= token_eval
             is_or = is_not = False
         elif is_and:
             if is_not:
-                if not_first:
-                    valid = token_eval - valid
-                else:
-                    valid -= token_eval
-                is_not = False
+                valid -= token_eval
             else:
                 valid &= token_eval
             is_and = is_not = False
         elif is_not:
-            valid -= token_eval
+            valid = all_elems_set - token_eval
         else:
-            print("Grammar error?")
+            print(f"Grammar error? -{t}-")
+        
+        is_not = is_not_; is_and = is_and_; is_or = is_or_
     return valid, (is_not, is_and, is_or)
 
 def bool_search_atomic(query: str, debug: bool) -> set:
@@ -90,7 +82,7 @@ def bool_search_atomic(query: str, debug: bool) -> set:
     query = query.strip()
     if not query:
         return set(), (False, False, False)
-    tokens = [token for token in regex_bool_op.split(query) if token]
+    tokens = [token for token in (token.strip() for token in regex_bool_op.split(query)) if token]
     is_not = is_and = is_or = False
     not_first = False
     valid = []
@@ -115,10 +107,9 @@ def bool_search_atomic(query: str, debug: bool) -> set:
                             valid = np.setdiff1d(all_elems_arr, valid, assume_unique=True)
                         else:
                             token_eval = np.setdiff1d(all_elems_arr, token_eval, assume_unique=True)
-                        is_not = False
                     valid = np.union1d(valid, token_eval)
                     
-                    is_or = False
+                    is_or = is_not = False
                     if not valid.shape: return set(), (is_not, is_and, is_or)
                 elif is_and:
                     if is_not:
@@ -126,11 +117,10 @@ def bool_search_atomic(query: str, debug: bool) -> set:
                             valid = np.setdiff1d(token_eval, valid, assume_unique=True)
                         else:
                             valid = np.setdiff1d(valid, token_eval, assume_unique=True)
-                        is_not = False
                     else:
                         valid = np.intersect1d(valid, token_eval, assume_unique=True)
                     
-                    is_and = False
+                    is_and = is_not = False
                     if not valid.shape: return set(), (is_not, is_and, is_or)
                 else:
                     valid = token_eval

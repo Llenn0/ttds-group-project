@@ -131,7 +131,7 @@ def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: 
                     f.write(f"Create index failure at book {book_id}:\n{''.join(traceback.format_exception(e))}\n")
                 failed_jobs.append(book_id)
             complete_counter += 1
-            if complete_counter % 5 is 0: gc.collect()
+            if complete_counter % 5 == 0: gc.collect()
             #print(f"Finished building index for {complete_counter} books...", end="\r")
         
         # concurrent.futures.wait(jobs)
