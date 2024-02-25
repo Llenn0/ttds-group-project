@@ -71,7 +71,7 @@ def bool_search(query: str, debug: bool=False) -> set:
         elif is_not:
             valid = all_elems_set - token_eval
         else:
-            print(f"Grammar error? -{t}-")
+            print(f"Grammar error?")
         
         is_not = is_not_; is_and = is_and_; is_or = is_or_
     return valid, (is_not, is_and, is_or)
