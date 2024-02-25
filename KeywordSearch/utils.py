@@ -18,7 +18,7 @@ try:
 except:
     USE_TQDM = False
 
-def construct_bool_table(index: Iterable[dict], all_tokens, valid_books, save_path: str|None=None):
+def construct_bool_table(index: Iterable[dict], all_tokens, valid_books, save_path):
     table = scipy.sparse.dok_matrix((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
     length = len(all_tokens)
     tqdm_iter = enumerate(index[:length])
@@ -114,7 +114,7 @@ def save_in_batches(batch_size: int, index_type: str, index: Iterable[dict], pre
         
         pickle_save(filename %(i+1), index[end:], unsafe_pickle)
 
-def fetch_sizes(parts: list[str]):
+def fetch_sizes(parts):
     sizes = dict()
     for part in parts:
         with open(part, "rb") as f:
@@ -147,3 +147,7 @@ def measure_sizes(dir: str="index", naming_rule: str=r"part([0-9]+)_inverted_([0
             print(f"Finished measuring size for {complete_counter} segments...", end="\r", flush=True)
     print("\nAll done")
     return results
+    
+class ZeroDict(dict):
+    def __missing__(self, _):
+        return 0
