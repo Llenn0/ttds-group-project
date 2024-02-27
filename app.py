@@ -1,11 +1,13 @@
 import os
 import sys
 import pickle
-from flask import Flask
+from flask import Flask, request
 import firebase_admin
 from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
-from run_semantic import SemanticSearch
+from cosine_semantic import SemanticSearch
+from google.cloud import storage
+from flask_cors import CORS
 
 load_dotenv()
 
@@ -25,7 +27,36 @@ db = firestore.client()
 coll = db.collection('index')
 
 app = Flask(__name__)
+CORS(app)
+
+print("Downloading Semantic Embeddings...")
+storage_client = storage.Client(project='moonlit-oven-412316')
+bucket = storage_client.bucket('ttds-static')
+if not os.path.isfile('document_embeddings.pkl'):
+    blob = bucket.blob('document_embeddings.pkl')
+    blob.download_to_filename("document_embeddings.pkl")
+    print("Semantic Embeddings Downloaded.")
+else:
+    print("Found Semantic Embeddings File")
+
+if not os.path.isfile('KeywordSearch/lookup_table.npz'):
+    blob = bucket.blob('lookup_table.npz')
+    blob.download_to_filename("KeywordSearch/lookup_table.npz")
+    print("Lookup Table Downloaded.")
+else:
+    print("Found Lookup Table File")
+
+if not os.path.isfile('KeywordSearch/all_tokens.pkl'):
+    blob = bucket.blob('all_tokens.pkl')
+    blob.download_to_filename("KeywordSearch/all_tokens.pkl")
+    print("All Tokens Downloaded.")
+else:
+    print("Found All Tokens File")
+
 searcher = SemanticSearch()
+import KeywordSearch.loader as loader
+loader.init_module()
+from KeywordSearch.kwsearch import bool_search
 
 # Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
 def create_index():
@@ -50,10 +81,24 @@ def hello_world():
 def hello():
     return 'world!'
 
-@app.route('/semantic')
+@app.route('/semantic', methods=["POST"])
 def semantic_search():
-    results = searcher.run_search_modified("the jungle book")
-    return results
+    data = request.get_json()
+    search = data["query"]
+    results = searcher.runSearch(search)
+    results = list(zip(*results))
+    docIds, scores = list(results[0]), list(results[1])
+    res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
+    return res_json
+
+@app.route('/boolean', methods=["POST"])
+def boolean_search():
+    data = request.get_json()
+    search = data["query"]
+    docIds, _ = bool_search(search)
+
+    res_json = {"docIds" : [{"id" : "PG" + str(docId)} for docId in docIds]}
+    return res_json
 
 # @app.route('/getdocs')
 # def docs():
