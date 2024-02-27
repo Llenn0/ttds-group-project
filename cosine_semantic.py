@@ -53,6 +53,3 @@ class SemanticSearch:
             print(score, doc)
 
         return doc_score_pairs
-
-test = SemanticSearch()
-test.runSearch("sciences fiction")
