@@ -5,7 +5,7 @@ from flask import Flask, request
 import firebase_admin
 from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
-from run_semantic import SemanticSearch
+from cosine_semantic import SemanticSearch
 from google.cloud import storage
 from flask_cors import CORS
 
