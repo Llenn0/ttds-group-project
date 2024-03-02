@@ -1,71 +1,61 @@
-import nltk
-import pickle
 import re
 
 from nltk.corpus import stopwords
-from unidecode import unidecode
-from Stemmer import Stemmer
+from unidecode import unidecode, unidecode_expect_nonascii
+from Stemmer import Stemmer, algorithms
 
-def unpickle_file(name):
-    """
-    :param name: str  |  Only 'bookshelf_categories', 'ebooks_by_bookshelf'
-    """
-    with open(name + '.pkl', 'rb') as file_in:
-        unpickled_file = pickle.load(file_in)
+from SPGC.cleanup import strip_headers
 
-    with open(name + '.txt', 'w') as file_out:
-        for key, value in unpickled_file.items():
-            file_out.write(f'{key}: {value}\n')
+stemmable_languages = set(algorithms())
+stopwords_available = {'hebrew', 'dutch', 'bengali', 'french', 'arabic', 'romanian', 'kazakh', 'italian', 'german', 'indonesian', 'nepali', 'danish', 'english', 'hinglish', 'spanish', 'basque', 'turkish', 'greek', 'slovene', 'chinese', 'russian', 'finnish', 'portuguese', 'norwegian', 'README', 'azerbaijani', 'catalan', 'tajik', 'hungarian', 'swedish'}
+stemmer_available = set(algorithms())
 
-def trim_ebook(book_id, raw_dir: str='', trim_dir: str=''):
-    """
-    :param name: str  |  e.g. 'PG10000'
-    """
-    with open(raw_dir + book_id + '_raw.txt', 'r', encoding="UTF-8") as file_in:
-        contents = file_in.read()
+def init_preprocessor(languages: tuple[str]=("english",)) -> tuple[Stemmer, frozenset[str]]:
+    stemmable = [lan for lan in languages if lan in stemmer_available]
+    stoppable = [lan for lan in languages if lan in stopwords_available]
+
+    if "english" in languages:
+        stem_lan = "english"
+    else:
+        stem_lan = stemmable[0] if stemmable else "english"
+        if len(stoppable) < 1:
+            stoppable = ["english"]
+
+    stemmer = Stemmer("english") if stem_lan not in ("chinese", "japanese") else None # use only English for now
+    stopwords_set = set()
+
+    for lan in stoppable:
+        addition = stopwords.words(lan)
+        if lan in ("chinese", "japanese"):
+            tmp = '\n'.join(addition)
+            addition = set(unidecode_expect_nonascii(tmp).lower().splitlines())
+            del tmp
+        stopwords_set.update(addition)
+
+    return stemmer, frozenset(stopwords_set)
+
+def preprocess_ebooks(job_infos: list[int], languages: tuple[str], raw_dir: str='', token_dir: str=''):
+    tokens_set = set()
+    raw_text_dir = raw_dir + "PG%d_raw.txt"
+    tokenised_text_dir = token_dir + "PG%d_tokens.txt"
+    regex_brackets = re.compile(r"\[.*\]")
+    regex_tokenise = re.compile(r"\b\w+\b")
+    stemmer, stopwords_set = init_preprocessor(languages)
+
+    for book_id in job_infos:
+        with open(raw_text_dir % book_id, 'r', encoding="UTF-8", errors="ignore") as f:
+            contents = strip_headers(f.read()) # strip project gutenberg headers
+        
+        contents = unidecode(contents, replace_str=' ').lower()
+        contents = regex_brackets.sub(' ', contents)
+        if stemmer is None:
+            tokens = [token for token in regex_tokenise.findall(contents) if token not in stopwords_set]
+        else:
+            tokens = [stemmer.stemWord(token) for token in regex_tokenise.findall(contents) if token not in stopwords_set]
+        
+        with open(tokenised_text_dir % book_id, 'w', encoding="UTF-8") as f:
+            f.write('\n'.join(tokens))
+        
+        tokens_set.update(tokens)
     
-    title = re.search(r'Title: (.*)', contents).group(1).upper()
-    start_pattern = f'\*\*\* START OF THE PROJECT GUTENBERG EBOOK {title} \*\*\*'
-    end_pattern = f'\*\*\* END OF THE PROJECT GUTENBERG EBOOK {title} \*\*\*'
-
-    start_index = re.search(start_pattern, contents).start() + len(start_pattern) - 6
-    end_index = re.search(end_pattern, contents).end() - len(end_pattern) + 6
-
-    # Blank lines removed here for readability; not optimal in terms of efficiency
-    trimmed_contents = re.sub(r'\n{3,}', '\n\n', contents[start_index:end_index])
-
-    with open(trim_dir + book_id + '_trimmed.txt', 'w', encoding="UTF-8") as file_out:
-        file_out.write(trimmed_contents)
-
-def preprocess_ebook(book_id, stopwords_set, stemmer, numeric=False, trim_dir: str='', data_dir: str=''):
-    with open(trim_dir + book_id + "_trimmed.txt", 'r', encoding="UTF-8") as file_in:
-        contents = file_in.read()
-    
-    convert_to_ascii = unidecode(contents)
-
-    # Based on :param numeric, match alphabetic or alphanumeric characters
-    regex = r'a-z0-9' if numeric else r'a-z'
-
-    # Remove all special characters except apostrophes in contractions (to match stopword removal)
-    pattern1 = f'[^{regex}\' ]|(?<![{regex}])\'|\'(?![{regex}])'
-    tokens = re.sub(pattern1, ' ', convert_to_ascii.lower()).split()
-    
-    terms = [stemmer.stemWord(word) for word in tokens if word not in stopwords_set]
-
-    with open(data_dir + book_id + "_processed.txt", 'w') as file_out:
-        file_out.write(' '.join(terms))
-
-def preprocess_pipeline(book_id, stopwords_set, stemmer, numeric=False, raw_dir: str='', trim_dir: str='', data_dir: str=''):
-    trim_ebook(book_id, raw_dir, trim_dir)
-    preprocess_ebook(book_id, stopwords_set, stemmer, numeric, trim_dir, data_dir)
-
-if __name__ == '__main__':
-    # unpickle_file('bookshelf_categories')
-    # unpickle_file('ebooks_by_bookshelf')
-
-    # nltk.download('stopwords')
-    stopwords_set = set(stopwords.words('english'))
-    stemmer = Stemmer('english')
-
-    trim_ebook('PG2')
-    preprocess_ebook('PG2', stopwords_set, stemmer)
+    return tokens_set

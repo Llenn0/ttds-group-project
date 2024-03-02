@@ -116,9 +116,16 @@ ENV/
 # VScode
 .vscode/
 
-*_processed.txt
-*_trimmed.txt
-SPGC/*
-index/*
+# cache/index folders
+cache/
+index/
+
+# logs
 done_jobs*
 *.log
+*.json
+
+# metadata stuffs
+metadata/bookshelves_html
+metadata/*.pkl
+metadata/*.bz2
