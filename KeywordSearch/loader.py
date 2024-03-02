@@ -262,7 +262,7 @@ def load_segment(path: str) -> list[dict]:
 
 def load_dummy_segment(path: str) -> list[dict]:
     with open(path, "rb") as f:
-        return [{k : None for k in token_dict.keys()} for token_dict in pickle.load(f)]
+        return [{k : v.shape[0] for k, v in token_dict.items()} for token_dict in pickle.load(f)]
         
 def load_merged_index(dir_: str=index_dir, save_merged: bool=False, max_workers: int=None, dummy: bool=False):
     if not isWin:

@@ -255,3 +255,9 @@ def pickle_to_json(naming_pattern: str=r"([0-9]+)_merged.pkl", dir_: str=index_d
 class ZeroDict(dict):
     def __missing__(self, _):
         return 0
+
+def dict2arr(data: dict[int, int|float], dtype: np.dtype) -> np.ndarray:
+    keys = list(data.keys())
+    arr = np.zeros(max(keys) + 1, dtype=np.float32)
+    arr[keys] = list(data.values())
+    return arr
