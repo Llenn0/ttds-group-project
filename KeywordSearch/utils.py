@@ -15,7 +15,7 @@ from collections import defaultdict
 import numpy as np
 import scipy.sparse
 
-from KeywordSearch.loader import LOG_PATH, LOOKUP_TABLE_PATH, raw_dir, tqdm
+from KeywordSearch.loader import LOG_PATH, LOOKUP_TABLE_PATH, VALID_BOOKS_PATH, raw_dir, tqdm
 from KeywordSearch import loader
 
 regex_extract_book_id = re.compile(r"\/ebooks\/([0-9]+)")
@@ -49,9 +49,9 @@ def get_new_book(book_id: int) -> int:
 
     return r.status_code
 
-def construct_bool_table(index: Iterable[dict], all_tokens, valid_books=None):
+def construct_bool_table(index: Iterable[dict], all_tokens: tuple[str], valid_books: Iterable[int]=None):
     if valid_books is None:
-        with open("processed_books.pkl", "rb") as f:
+        with open(VALID_BOOKS_PATH, "rb") as f:
             valid_books = tuple(pickle.load(f))
     table = scipy.sparse.dok_matrix((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
     del valid_books
@@ -61,8 +61,10 @@ def construct_bool_table(index: Iterable[dict], all_tokens, valid_books=None):
             table[token_id, tuple(token_dict.keys())] = True
     gc.collect()
     table = table.tocsr()
+    print("Finished converting lookup table to CSR format", flush=True)
     gc.collect()
     scipy.sparse.save_npz(LOOKUP_TABLE_PATH, table, compressed=True)
+    print(f"Finished saving lookup table to {LOOKUP_TABLE_PATH}", flush=True)
     return table
 
 # import h5py
