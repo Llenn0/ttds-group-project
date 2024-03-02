@@ -1,20 +1,24 @@
-import concurrent.futures
-import pickle
 import os
 import gc
 import re
+import csv
 import glob
-import traceback
 import time
+import pickle
+import traceback
+import concurrent.futures
+from collections import defaultdict
 
-from tqdm import tqdm
-import nltk
 from nltk.corpus import stopwords
 from Stemmer import Stemmer
+from tqdm import tqdm
+import nltk
 
-from Preprocessing import preprocess_pipeline
+from Preprocessing import preprocess_ebooks
 
-VALID_BOOKS_PATH = "valid_books.pkl"
+# Paths
+LOOKUP_TABLE_PATH = "../lookup_table.npz"
+VALID_BOOKS_PATH = "processed_books.pkl"
 ALL_TOKENS_PATH = "all_tokens.pkl"
 LOG_PATH = "kwsearch.log"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
@@ -22,33 +26,32 @@ print("Using `is` instead of `=` for comparison in performance-critical code is 
 
 print("Downloading stopwords...")
 nltk.download('stopwords')
+
 def init_module():
-    global processed_books, raw_dir, token_dir, stopwords_set, stemmer, valid_books, all_tokens, tokens_fetched
+    global processed_books, raw_dir, token_dir
+    global stopwords_set, stemmer, processed_books, all_tokens, tokens_fetched, language_code
+    global metadata, all_subjects
 
     try:
-        with open("processed_books.pkl", 'rb') as f:
-            processed_books = pickle.load(f)
+        with open(VALID_BOOKS_PATH, 'rb') as f:
+            processed_books = set(pickle.load(f))
     except:
         processed_books = set()
     
     try:
         with open("pgpath", 'r', encoding="UTF-8") as f:
-            token_dir = f.readline().strip()
-        if token_dir[-1] not in ('/', '\\'):
+            token_dir = f.readline().strip().replace('\\', '/')
+        if token_dir[-1] != '/':
             token_dir = token_dir + '/'
     except:
         token_dir = ''
 
-    raw_dir = token_dir.replace("tokens", "raw")
+    raw_dir = token_dir.replace("ttds-tokens", "raw")
     stopwords_set = frozenset(stopwords.words("english"))
     stemmer = Stemmer("english")
 
-    if os.path.exists(VALID_BOOKS_PATH):
-        with open(VALID_BOOKS_PATH, "rb") as f:
-            k_vb, offset_vb, valid_books = pickle.load(f)
-    else:
-        k_vb = offset_vb = -1
-        valid_books = set()
+    if not os.path.exists(token_dir):
+        os.mkdir(token_dir)
     
     if os.path.exists(ALL_TOKENS_PATH):
         with open(ALL_TOKENS_PATH, "rb") as f:
@@ -57,52 +60,121 @@ def init_module():
         k_at = offset_at = -1
         all_tokens = tuple()
     
-    tokens_fetched = all(val >= 0 for val in (k_vb, offset_vb, k_at, offset_at))
+    tokens_fetched = processed_books and all_tokens
 
     if os.path.exists(LOG_PATH) and os.path.isfile(LOG_PATH):
         os.remove(LOG_PATH)
+    
+    with open("language-codes.csv", 'r', encoding="utf-8") as f:
+        f.readline()
+        reader = csv.reader(f)
+        regex_extract = re.compile(r"[^A-Za-z ]")
+        tmp = ((code, regex_extract.split(lan)[0].lower()) for code, lan in reader)
+        language_code = defaultdict((lambda : "english"), tmp)
+    
+    metadata, all_subjects = load_lan_dict()
 
-def process_first_k_books(load_from: str="english_books.txt", k: int=500, offset: int=0):
+def load_lan_dict(path: str="metadata/metadata.csv") -> tuple[defaultdict, dict]:
+    extract_item = re.compile(r"\'(\w+)\'")
+    lan_dict = defaultdict(lambda : set())
+    sub_dict = dict()
+    all_lan = set()
+    all_sub = set()
+    meta = dict()
+    with open(path, 'r', encoding="utf-8", errors="ignore") as f:
+        f.readline()
+        reader = csv.reader(f)
+        records = [
+            (
+                int(record[0][2:]), 
+                tuple(language_code[lan] for lan in extract_item.findall(record[5])),
+                sorted(extract_item.findall(record[7].casefold()))
+            ) for record in reader
+        ]
+    
+    for book_id, languages, subjects in records:
+        lan_dict[languages].add(book_id)
+        all_lan.add(languages)
+        all_sub.update(subjects)
+    
+    # Memory-saving measure: use the same string object for same subject across all books
+    all_sub_sorted = sorted(all_sub)
+    for book_id, _, subjects in records:
+        sub_dict[book_id] = tuple(all_sub_sorted[all_sub_sorted.index(sub)] for sub in subjects)
+    
+    for lan in all_lan:
+        for book_id in lan_dict[lan]:
+            meta[book_id] = (lan, sub_dict[book_id])
+
+    return meta, all_sub_sorted
+
+def process_first_k_books(k: int=-1, offset: int=0, batch_size=500):
     global processed_books
-
-    with open(load_from, 'r') as f:
-        book_list = [book_id.strip() for book_id in f.readlines()]
-    book_list = [book_id.upper() for book_id in book_list if book_id]
+    
+    book_list = sorted(int(fname.split('_')[0][2:]) for fname in glob.glob("*.txt", root_dir=raw_dir))
+    book_list = [book_id for book_id in book_list if (book_id not in processed_books) and (book_id in metadata)]
     list_length = len(book_list)
+
     if offset >= list_length:
         return
-    book_list = set(book_list[offset:min(list_length, offset + k)]) - processed_books
-    if not os.path.exists("processed"):
-        os.mkdir("processed")
-    if not os.path.exists("trimmed"):
-        os.mkdir("trimmed")
+    
+    if k > 0:
+        book_list = book_list[offset:min(list_length, offset + k)]
 
     print(f"{len(book_list)} books to process")
+
+    split_by_lan = defaultdict(lambda : list())
+    for book_id in book_list:
+        split_by_lan[metadata[book_id][0]].append(book_id)
+
     failed_jobs = []
     completed_jobs = 0
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        jobs = {
-            pool.submit(
-                preprocess_pipeline, book_id, stopwords_set, stemmer, raw_dir=raw_dir,
-                trim_dir="trimmed/", data_dir="processed/")
-                : book_id for book_id in book_list
-            }
-        
-        for job in concurrent.futures.as_completed(jobs):
-            book_id = jobs[job]
-            try:
-                job.result()
-                processed_books.add(book_id)
-            except Exception as e:
-                print(e)
-                failed_jobs.append(book_id)
-            completed_jobs += 1
-            print(f"Processed {completed_jobs} books...", end="\r")
-    
-    with open("processed_books.pkl", 'wb') as f:
+
+    all_tokens_set = set()
+
+    with concurrent.futures.ProcessPoolExecutor() as pool:
+        jobs = dict()
+        with tqdm(total=len(book_list), desc="Initialising...") as pbar:
+            for lan, lan_book_list in split_by_lan.items():
+                pbar.set_description(f"Submitting jobs for language {lan}...")
+                if len(lan_book_list) < batch_size:
+                    jobs[pool.submit(preprocess_ebooks, lan_book_list, lan, raw_dir, token_dir)] = lan_book_list
+                else:
+                    list_length = len(lan_book_list)
+                    num_batches = list_length // batch_size
+                    if list_length % batch_size:
+                        num_batches += 1
+                    for i in range(num_batches):
+                        start = i * batch_size
+                        end = min(list_length, start + batch_size)
+                        slice = lan_book_list[start:end]
+                        jobs[pool.submit(preprocess_ebooks, slice, lan, raw_dir, token_dir)] = slice
+
+            pbar.set_description("Tokenising")
+            for job in concurrent.futures.as_completed(jobs):
+                books = jobs[job]
+                try:
+                    all_tokens_set.update(job.result())
+                    processed_books.update(books)
+                except Exception as e:
+                    with open(LOG_PATH, 'a', encoding="UTF-8") as f:
+                        f.write(f"Tokenisation failure at {books}:\n{''.join(traceback.format_exception(e))}\n")
+                    failed_jobs.extend(books)
+                job_size = len(books)
+                completed_jobs += job_size
+                pbar.update(job_size)
+
+    gc.collect()
+    with open("processed_books.pkl", "wb") as f:
         pickle.dump(processed_books, f)
+
+    del processed_books, jobs, split_by_lan
+
+    gc.collect()
+    with open("all_tokens.pkl", "wb") as f:
+        pickle.dump((k, offset, tuple(sorted(all_tokens_set)) if '' in all_tokens_set else tuple([''] + sorted(all_tokens_set))), f)
     
-    print(f"{len(failed_jobs)}/{len(jobs)} pre-processing jobs failed:\n- " + '\n- '.join(failed_jobs))
+    print(f"{len(failed_jobs)}/{completed_jobs} pre-processing jobs failed:\n- " + '\n- '.join(str(i) for i in failed_jobs))
 
 def fetch_token_vocab(fname: str, stemmer: Stemmer):
     with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
@@ -171,11 +243,11 @@ def load_segment(path: str):
     with open(path, "rb") as f:
         return pickle.load(f)
         
-def load_merged_index(dir: str="index", save_merged: bool=False):
+def load_merged_index(dir_: str="index", save_merged: bool=False, max_workers: int=None):
     start_time = time.time()
 
     naming_regex = re.compile(r"([0-9]+)_merged.pkl")
-    segments = [[int(naming_regex.fullmatch(filename).group(1)), filename] for filename in glob.glob("*_merged.pkl", root_dir=dir)]
+    segments = [[int(naming_regex.fullmatch(filename).group(1)), filename] for filename in glob.glob("*_merged.pkl", root_dir=dir_)]
     segments.sort(key=lambda x: x[0])
     
     # Single-threaded version
@@ -189,10 +261,10 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
     print(f"{len(segments)} segments to load")
     complete_counter = 0
     index_dict = dict()
-    with concurrent.futures.ProcessPoolExecutor() as pool:
-        jobs = {pool.submit(load_segment, os.path.join(dir, filename)) : segment_index
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as pool:
+        jobs = {pool.submit(load_segment, os.path.join(dir_, filename)) : segment_index
                 for segment_index, filename in segments}
-        for job in tqdm(concurrent.futures.as_completed(jobs), total=len(jobs)):
+        for job in tqdm(concurrent.futures.as_completed(jobs), total=len(jobs), desc="Loading segments"):
             segment_index = jobs[job]
             try:
                 index_dict[segment_index] = job.result()
@@ -206,7 +278,7 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
     
     index = []
     complete_counter = 0
-    for _, segment in tqdm(sorted(index_dict.items(), key=lambda x: x[0]), total=len(index_dict)):
+    for _, segment in tqdm(sorted(index_dict.items(), key=lambda x: x[0]), total=len(index_dict), desc="Merging segments"):
         index.extend(segment)
         complete_counter += 1
         if (complete_counter % 100 == 0):
@@ -226,7 +298,7 @@ def load_merged_index(dir: str="index", save_merged: bool=False):
     print(f"The index took {h_str}{m_str}{run_time} seconds to load")
 
     if save_merged:
-        with open(os.path.join(dir, f"full_index.pkl"), "wb") as f:
+        with open(os.path.join(dir_, f"full_index.pkl"), "wb") as f:
             pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
         print("Saving done")
 

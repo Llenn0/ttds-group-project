@@ -95,7 +95,7 @@ def semantic_search():
 def boolean_search():
     data = request.get_json()
     search = data["query"]
-    docIds, _ = bool_search(search)
+    docIds = bool_search(search)
 
     res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
     return res_json

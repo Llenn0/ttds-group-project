@@ -118,7 +118,13 @@ ENV/
 
 *_processed.txt
 *_trimmed.txt
-SPGC/*
 index/*
 done_jobs*
+
 *.log
+*.json
+
+
+metadata/*.pkl
+metadata/bookshelves_html
+metadata/*.bz2
