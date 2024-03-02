@@ -7,6 +7,7 @@ import time
 import pickle
 import traceback
 import concurrent.futures
+from sys import platform
 from collections import defaultdict
 
 from nltk.corpus import stopwords
@@ -16,6 +17,9 @@ import nltk
 
 from Preprocessing import preprocess_ebooks
 
+isWin = platform.lower() == "win32"
+deployment_path = "/app/"
+
 # Paths
 LOOKUP_TABLE_PATH = "KeywordSearch/lookup_table.npz"
 VALID_BOOKS_PATH = "KeywordSearch/processed_books.pkl"
@@ -24,11 +28,16 @@ LOG_PATH = "kwsearch.log"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
 print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
 
+if not isWin:
+    LOOKUP_TABLE_PATH = deployment_path + LOOKUP_TABLE_PATH
+    VALID_BOOKS_PATH = deployment_path + VALID_BOOKS_PATH
+    ALL_TOKENS_PATH = deployment_path + ALL_TOKENS_PATH
+
 print("Downloading stopwords...")
 nltk.download('stopwords')
 
 def init_module():
-    global processed_books, raw_dir, token_dir
+    global processed_books, raw_dir, token_dir, index_dir
     global stopwords_set, stemmer, processed_books, all_tokens, tokens_fetched, language_code
     global metadata, all_subjects
 
@@ -47,11 +56,12 @@ def init_module():
         token_dir = ''
 
     raw_dir = token_dir.replace("ttds-tokens", "raw")
+    index_dir = "index/"
     stopwords_set = frozenset(stopwords.words("english"))
     stemmer = Stemmer("english")
 
     if not os.path.exists(token_dir):
-        os.mkdir(token_dir)
+        os.makedirs(token_dir)
     
     if os.path.exists(ALL_TOKENS_PATH):
         with open(ALL_TOKENS_PATH, "rb") as f:
@@ -74,7 +84,14 @@ def init_module():
     
     metadata, all_subjects = load_lan_dict()
 
+    if not isWin:
+        token_dir = deployment_path + token_dir
+        raw_dir = deployment_path + raw_dir
+        index_dir = deployment_path + index_dir
+
 def load_lan_dict(path: str="metadata/metadata.csv") -> tuple[defaultdict, dict]:
+    if not isWin:
+        path = deployment_path + path
     extract_item = re.compile(r"\'(\w+)\'")
     lan_dict = defaultdict(lambda : set())
     sub_dict = dict()
@@ -247,7 +264,9 @@ def load_dummy_segment(path: str) -> list[dict]:
     with open(path, "rb") as f:
         return [{k : None for k in token_dict.keys()} for token_dict in pickle.load(f)]
         
-def load_merged_index(dir_: str="index", save_merged: bool=False, max_workers: int=None, dummy: bool=False):
+def load_merged_index(dir_: str=index_dir, save_merged: bool=False, max_workers: int=None, dummy: bool=False):
+    if not isWin:
+        dir_ = deployment_path + dir_
     start_time = time.time()
 
     load_func = load_dummy_segment if dummy else load_segment

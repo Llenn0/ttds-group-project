@@ -15,7 +15,7 @@ from collections import defaultdict
 import numpy as np
 import scipy.sparse
 
-from KeywordSearch.loader import LOG_PATH, LOOKUP_TABLE_PATH, VALID_BOOKS_PATH, raw_dir, tqdm
+from KeywordSearch.loader import LOG_PATH, LOOKUP_TABLE_PATH, VALID_BOOKS_PATH, raw_dir, index_dir, tqdm
 from KeywordSearch import loader
 
 regex_extract_book_id = re.compile(r"\/ebooks\/([0-9]+)")
@@ -144,20 +144,20 @@ def save_in_batches(batch_size: int, index_type: str, index: Iterable[dict], pre
                     index_size: int=None, unsafe_pickle: bool=False, use_json: bool=False, 
                     pool: concurrent.futures.ProcessPoolExecutor=None):
     gc.collect()
-    if not os.path.exists("index"):
-        os.mkdir("index")
+    if not os.path.exists(index_dir):
+        os.makedirs(index_dir)
     if batch_size <= 0:
         if use_json:
-            save_json(index, f"index/{prefix}_{index_type}_index.pkl")
+            save_json(index, os.path.join(index_dir, f"{prefix}_{index_type}_index.json"))
         else:
-            save_pickle(index, f"index/{prefix}_{index_type}_index.pkl", unsafe_pickle)
+            save_pickle(index, os.path.join(index_dir, f"{prefix}_{index_type}_index.pkl"), unsafe_pickle)
     else:
         if index_size == None:
             index_size = len(index)
         num_batches = index_size // batch_size
         if index_size % batch_size:
             num_batches += 1
-        filename = f"index/{prefix}_{index_type}_%0{len(str(num_batches))}d.pkl"
+        filename = os.path.join(index_dir, f"{prefix}_{index_type}_%0{len(str(num_batches))}d.pkl")
         end = 0
         i = -1
 
@@ -197,7 +197,7 @@ def fetch_sizes(parts):
         gc.collect()
     return sizes
 
-def measure_sizes(dir: str="index", naming_rule: str=r"part([0-9]+)_inverted_([0-9]+).pkl"):
+def measure_sizes(dir: str=index_dir, naming_rule: str=r"part([0-9]+)_inverted_([0-9]+).pkl"):
     naming_regex = re.compile(naming_rule)
     index_segments = glob.glob(naming_rule.replace("([0-9]+)", '*'), root_dir=dir)
     lookup_table = defaultdict(lambda : list())
@@ -229,7 +229,7 @@ def convert_to_json(path: str):
     gc.collect()
     save_json(segment, json_path)
 
-def pickle_to_json(naming_pattern: str=r"([0-9]+)_merged.pkl", dir_: str="index"):
+def pickle_to_json(naming_pattern: str=r"([0-9]+)_merged.pkl", dir_: str=index_dir):
     regex_naming = re.compile(naming_pattern)
     glob_pattern = naming_pattern.replace("([0-9]+)", '*')
     segments = [[int(regex_naming.fullmatch(filename).group(1)), filename] 
