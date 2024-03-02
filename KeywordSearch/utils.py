@@ -34,22 +34,20 @@ def fetch_update() -> bool:
         return True
     return False
 
-def get_new_book(book_id: int) -> bool:
+def get_new_book(book_id: int) -> int:
+    # 404 = non-existent
     r = requests.get(ebook_normal %(book_id))
-    if r.status_code != 200:
-        r = requests.get(ebook_cached %(book_id, book_id))
-        if r.status_code != 200:
-            return False
-    content = r.content.decode(encoding="utf-8", errors="ignore")
-    if is_win32:
-        content.replace("\r\n", '\n')
-    if content[0] == '\ufeff' and content:
-        content = content[1:]
-    
-    with open(os.path.join(raw_dir, f"PG{book_id}_raw.txt"), encoding="utf-8") as f:
-        f.write(content.replace("\r\n", '\n') if is_win32 else content)
+    if r.status_code == 200:
+        content = r.content.decode(encoding="utf-8", errors="ignore")
+        if is_win32:
+            content.replace("\r\n", '\n')
+        if content[0] == '\ufeff' and content:
+            content = content[1:]
+        
+        with open(os.path.join(raw_dir, f"PG{book_id}_raw.txt"), encoding="utf-8") as f:
+            f.write(content.replace("\r\n", '\n') if is_win32 else content)
 
-    return True
+    return r.status_code
 
 def construct_bool_table(index: Iterable[dict], all_tokens, valid_books=None):
     if valid_books is None:
