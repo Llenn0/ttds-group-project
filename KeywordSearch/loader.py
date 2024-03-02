@@ -25,6 +25,7 @@ LOOKUP_TABLE_PATH = "KeywordSearch/lookup_table.npz"
 VALID_BOOKS_PATH = "KeywordSearch/processed_books.pkl"
 ALL_TOKENS_PATH = "KeywordSearch/all_tokens.pkl"
 LOG_PATH = "kwsearch.log"
+index_dir = "index/"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
 print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
 
@@ -32,6 +33,7 @@ if not isWin:
     LOOKUP_TABLE_PATH = deployment_path + LOOKUP_TABLE_PATH
     VALID_BOOKS_PATH = deployment_path + VALID_BOOKS_PATH
     ALL_TOKENS_PATH = deployment_path + ALL_TOKENS_PATH
+    index_dir = deployment_path + index_dir
 
 print("Downloading stopwords...")
 nltk.download('stopwords')
@@ -56,7 +58,6 @@ def init_module():
         token_dir = ''
 
     raw_dir = token_dir.replace("ttds-tokens", "raw")
-    index_dir = "index/"
     stopwords_set = frozenset(stopwords.words("english"))
     stemmer = Stemmer("english")
 
@@ -87,7 +88,6 @@ def init_module():
     if not isWin:
         token_dir = deployment_path + token_dir
         raw_dir = deployment_path + raw_dir
-        index_dir = deployment_path + index_dir
 
 def load_lan_dict(path: str="metadata/metadata.csv") -> tuple[defaultdict, dict]:
     if not isWin:
