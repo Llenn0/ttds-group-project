@@ -9,151 +9,125 @@ import re
 import glob
 from collections import defaultdict
 
-from tqdm import tqdm
 import numpy as np
 from Stemmer import Stemmer
 
-from KeywordSearch.loader import stopwords_set, token_dir, stemmer, LOG_PATH
-from KeywordSearch.utils import cast2intarr, save_in_batches, ZeroDict
+from KeywordSearch.loader import token_dir, LOG_PATH, tqdm
+from KeywordSearch.utils import cast2intarr, save_in_batches, ZeroDict, save_json
 
-def build_inverted_index(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: list[dict]):
-    with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
-        tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
-                  if token not in stopwords_set]
-    tokens_arr = np.array(tokens)
-    for token in set(tokens):
-        token_occurences = np.where(tokens_arr == token)[0]
-        index[token][book_id], _ = cast2intarr(token_occurences, delta_encode=False)
-    del tokens_arr, token_occurences
+def return_dict():
+    return dict()
 
-def build_inverted_index_batch(job_infos: list[tuple[str, int]], stemmer: Stemmer, token_index_dict: dict, index: list[dict]):
-    for book_id, fname in job_infos:
-        with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
-            tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
-                    if token not in stopwords_set]
-        tokens_arr = np.array(tokens)
-        for token in set(tokens):
-            token_occurences = np.where(tokens_arr == token)[0]
-            index[token][book_id], _ = cast2intarr(token_occurences, delta_encode=False)
-    del tokens, tokens_arr, token_occurences
-    gc.collect()
+def build_inverted_index_batch(job_infos: list[int], token_index_dict: dict, 
+                               index: list[dict] | None=None) -> list[dict] | defaultdict[int, dict]:
+    if index is None:
+        index = defaultdict(return_dict)
+    
+    if len(job_infos):
+        tokenised_text_dir = token_dir + "PG%d_tokens.txt"
+        for book_id in job_infos:
+            with open(tokenised_text_dir % book_id, 'r', encoding="UTF-8", errors="ignore") as f:
+                tokens = [token_index_dict[token] for token in f.read().splitlines()]
+            tokens_arr = np.array(tokens)
+            for token in set(tokens):
+                token_occurences = np.where(tokens_arr == token)[0]
+                index[token][book_id], _ = cast2intarr(token_occurences, delta_encode=False)
+            del tokens_arr, token_occurences
+        del tokens
+        gc.collect()
 
-def build_bow_index_alt(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: list[dict]):
-    with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
-        tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
-                  if token not in stopwords_set]
-    vocab_list = sorted(set(tokens))
-    vocab, vocab_delta = cast2intarr(vocab_list)
-    counts, count_delta = cast2intarr([tokens.count(token) for token in vocab_list])
-    index[book_id] = (vocab_delta, vocab, count_delta, counts)
+    return index
 
-def build_bow_index(fname: str, book_id: int, stemmer: Stemmer, token_index_dict: dict, index: list[tuple]):
-    with open(fname, 'r', encoding="UTF-8", errors="ignore") as f:
-        tokens = [token_index_dict[stemmer.stemWord(token)] for token in f.read().splitlines() 
-                  if token not in stopwords_set]
-    vocab_list = sorted(set(tokens))
-    token_arr = np.array(tokens)
-    vocab, vocab_delta = cast2intarr(vocab_list)
-    counts, count_delta = cast2intarr([np.sum(token_arr == token) for token in vocab_list])
-    index[book_id] = (vocab_delta, vocab, count_delta, counts)
-
-def build_full_index(offset: int=0, k: int=-1, batch_size: int=500, index_type: str="bow", prefix: str="", unsafe_pickle: bool=False, skip_pickle: bool=False) -> tuple[list, list]:
+def build_full_index(pool: concurrent.futures.ProcessPoolExecutor, offset: int=0, k: int=-1, batch_size: int=50, index_type: str="inverted", 
+                     prefix: str="", skip_save: bool=False, use_json: bool=False) -> tuple[list, list]:
     assert index_type in ("bow", "inverted"), "index_type must be \"bow\" or \"inverted\""
+    use_process = isinstance(pool, concurrent.futures.ProcessPoolExecutor)
+    assert use_process or isinstance(pool, concurrent.futures.ThreadPoolExecutor), \
+        "Argument `pool` must be a ProcessPoolExecutor or ThreadPoolExecutor"
 
-    with open("valid_books.pkl", "rb") as f:
-        _, _, valid_books = pickle.load(f)
+    with open("processed_books.pkl", "rb") as f:
+        processed_books = pickle.load(f)
     with open("all_tokens.pkl", "rb") as f:
         _, _, all_tokens = pickle.load(f)
 
     all_tokens = tuple(all_tokens)
     token_index_dict = ZeroDict((token, i) for i, token in enumerate(all_tokens))
-    book_path_template = token_dir + "PG%d_tokens.txt"
     
-    list_length = len(valid_books)
+    list_length = len(processed_books)
     if offset >= list_length:
         return
-    valid_books = sorted(valid_books)[offset:min(list_length, offset + k)]
+    books_to_index = sorted(processed_books)[offset:min(list_length, offset + k)]
 
-    # todo: switch between two modes
-    if index_type == "bow":
-        index = [None] * (np.max(valid_books) + 1)
-        index_func = build_bow_index
-        index_size = len(valid_books)
-    else:
-        index = [dict() for _ in all_tokens]
-        index_func = build_inverted_index_batch
-        index_size = len(all_tokens)
+    index = [dict() for _ in all_tokens]
+    index_func = build_inverted_index_batch
+    index_size = len(all_tokens)
 
-    complete_counter = 0
+    completed_jobs = 0
     failed_jobs = []
+    done_jobs = set()
 
-    if True:
-        valid_books_batch = []
-        num_books = len(valid_books)
-        num_batches = num_books // 20
-        end = 0
-        i = -1
+    # with concurrent.futures.ProcessPoolExecutor() as pool:
+    jobs = dict()
+    index_to_submit = None if use_process else index
+    with tqdm(total=len(books_to_index), desc="Submitting jobs") as pbar:
+        list_length = len(books_to_index)
+        num_batches = list_length // batch_size
+        if list_length % batch_size:
+            num_batches += 1
         for i in range(num_batches):
-            start = i * 20
-            end = min(start + 20, num_books)
-            valid_books_batch.append(tuple((book_id, book_path_template % book_id) for book_id in valid_books[start:end]))
-        
-        if end != num_books:
-            valid_books_batch.append(tuple((book_id, book_path_template % book_id) for book_id in valid_books[end:]))
+            start = i * batch_size
+            end = min(list_length, start + batch_size)
+            slice = books_to_index[start:end]
+            jobs[pool.submit(index_func, slice, token_index_dict, index_to_submit)] = slice
+            pbar.update(len(slice))
+    
+    with tqdm(total=len(books_to_index), desc="Initialising...") as pbar:        
+        pbar.set_description("Indexing")
 
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        # jobs = {
-        #     pool.submit(
-        #         index_func, book_path_template % book_id, book_id, stemmer, token_index_dict, index.copy())
-        #         : book_id for book_id in valid_books
-        #     }
-        jobs = {
-            pool.submit(
-                index_func, books_info, stemmer, token_index_dict, index)
-                : [info[0] for info in books_info] for books_info in valid_books_batch
-            }
-        
-        print(f"{len(jobs)} jobs in total")
-
-        for job in tqdm(concurrent.futures.as_completed(jobs), total=len(jobs)):
-            book_id = jobs[job]
+        for job in concurrent.futures.as_completed(jobs):
+            books = jobs[job]
             try:
-                job.result()
-                # for token_entry, addition in zip(index, job.result()):
-                #     if addition:
-                #         token_entry.update(addition)
+                if use_process:
+                    for add_key, addition in job.result().items():
+                        if addition:
+                            index[add_key].update(addition)
+                    del addition
+                else:
+                    job.result()
+                done_jobs.update(books)
             except Exception as e:
                 with open(LOG_PATH, 'a', encoding="UTF-8") as f:
-                    f.write(f"Create index failure at book {book_id}:\n{''.join(traceback.format_exception(e))}\n")
-                failed_jobs.append(book_id)
-            complete_counter += 1
-            if complete_counter % 5 == 0: gc.collect()
+                    f.write(f"Create index failure at {books}:\n{''.join(traceback.format_exception(e))}\n")
+                failed_jobs.extend(books)
+            job_size = len(books)
+            completed_jobs += job_size
+            pbar.update(job_size)
+            if completed_jobs % 5 is 0: gc.collect()
+
             #print(f"Finished building index for {complete_counter} books...", end="\r")
         
         # concurrent.futures.wait(jobs)
         #print(f"Finished building index for {complete_counter} books...", flush=True)
-    print(f"{len(failed_jobs)}/{len(jobs)} failures while building index", flush=True)
+    print(f"{len(failed_jobs)}/{len(books_to_index)} failures while building index", flush=True)
 
-    # done_jobs = set(jobs.values())
-    done_jobs = []
-    for job_batch in jobs.values():
-        done_jobs.extend(job_batch)
-    done_jobs = set(done_jobs)
     del jobs
     gc.collect()
     
-    if not skip_pickle:
+    if not skip_save:
         if not os.path.exists("index"):
             os.mkdir("index")
         try:
-            with open(f"done_jobs_{prefix}.pkl", "wb") as f:
-                pickle.dump(done_jobs, f)
-            save_in_batches(batch_size, index_type, index, prefix, index_size, unsafe_pickle)
+            if use_json:
+                save_json(sorted(done_jobs), f"done_jobs_{prefix}.json")
+            else:
+                with open(f"done_jobs_{prefix}.pkl", "wb") as f:
+                    pickle.dump(done_jobs, f)
+            save_in_batches(5000, index_type, index, prefix, index_size, unsafe_pickle=False, use_json=use_json, pool=pool)
         except Exception as e:
             print(e)
             print("Pickle Failure")
         gc.collect()
-    return index, valid_books
+    return index, books_to_index
 
 def merge_parts(parts: list[str], segment_index: str | int=-1, save_dir: str="index"):
     with open(parts.pop(), "rb") as f:

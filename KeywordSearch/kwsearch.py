@@ -1,21 +1,20 @@
+from typing import Iterable
+
 import re
 import gc
 
 import numpy as np
 import scipy.sparse
+from unidecode import unidecode
 
 from KeywordSearch import utils
-from KeywordSearch.loader import stemmer, valid_books, all_tokens, stopwords_set
-
-# Path for look-up table for boolean search
-LOOKUP_TABLE_PATH = "KeywordSearch/lookup_table.npz"
-
+from KeywordSearch.loader import stemmer, processed_books, all_tokens, stopwords_set, LOOKUP_TABLE_PATH
 
 # Sparse look-up table aids boolean search
 lookup_table: scipy.sparse.csr_matrix | None
-if valid_books and all_tokens:
+try:
     lookup_table = scipy.sparse.load_npz(LOOKUP_TABLE_PATH)
-else:
+except:
     lookup_table = None
 
 # Pre-compiled regular expressions for parsing boolean queries
@@ -23,6 +22,7 @@ regex_phrase: re.Pattern                = re.compile(r"\"[\w\s]\"")
 regex_non_alnum: re.Pattern             = re.compile(r"[^A-Za-z0-9.]")
 regex_bracket: re.Pattern               = re.compile(r"\((.+)\)( +(?:NOT|AND|OR))?")
 regex_bool_op: re.Pattern               = re.compile(r"(NOT|AND|OR)")
+regex_tokenise: re.Pattern              = re.compile(r"\b\w+\b")
 
 # Frozen set of boolean search operators
 bool_ops = frozenset(("NOT", "AND", "OR"))
@@ -30,23 +30,30 @@ bool_ops = frozenset(("NOT", "AND", "OR"))
 # Other global variables that are expensive to generate
 token_index_dict: dict[str, int]        = utils.ZeroDict((token, i) for i, token in enumerate(all_tokens))
 all_tokens_set: set[str]                = set(all_tokens)
-book_index: np.ndarray[int]             = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)[0]
-all_elems_set: set[int]                 = frozenset(valid_books)
-all_elems_arr: np.ndarray[np.int32]     = np.array(sorted(valid_books), dtype=np.int32)
+book_index: np.ndarray[int]             = utils.cast2intarr(np.array(sorted(processed_books)), delta_encode=False)[0]
+all_elems_set: set[int]                 = frozenset(processed_books)
+all_elems_arr: np.ndarray[np.int32]     = np.array(sorted(processed_books), dtype=np.int32)
 
 # Garbage collection
 gc.collect()
 
-def update_index(valid_books, all_tokens):
+def update_index(processed_books, all_tokens):
     global token_index_dict, all_tokens_set, book_index, all_elems_set, all_elems_arr
     token_index_dict = utils.ZeroDict((token, i) for i, token in enumerate(all_tokens))
     all_tokens_set = set(all_tokens)
-    book_index = utils.cast2intarr(np.array(sorted(valid_books)), delta_encode=False)[0]
+    book_index = utils.cast2intarr(np.array(sorted(processed_books)), delta_encode=False)[0]
     all_elems_set = frozenset(range(lookup_table.shape[1]))
     all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
     gc.collect()
 
-def bool_search(query: str, debug: bool=False) -> set:
+def bool_search(query: str, index: Iterable[dict], debug: bool=False):
+    query = unidecode(query)
+    if regex_bool_op.search(query) is None:
+        return phrase_search(regex_tokenise.findall(query.lower()), index, debug)
+    else:
+        return _bool_search(query, debug)[0]
+
+def _bool_search(query: str, debug: bool=False) -> set:
     if debug:
         print(regex_bracket.split(query))
     tokens = (bool_search_atomic(token, debug) for token in regex_bracket.split(query) if token)
@@ -78,7 +85,7 @@ def bool_search(query: str, debug: bool=False) -> set:
 
 def bool_search_atomic(query: str, debug: bool) -> set:
     if '(' in query:
-        return bool_search(query, debug)
+        return _bool_search(query, debug)
     query = query.strip()
     if not query:
         return set(), (False, False, False)
@@ -131,11 +138,12 @@ def bool_search_atomic(query: str, debug: bool) -> set:
         valid = set(valid.tolist())
     return valid, (is_not, is_and, is_or)
 
-def phrase_search(words: list[str], index: list[dict] | tuple[dict], debug: bool=False):
+def phrase_search(words: list[str], index: Iterable[dict], debug: bool=False):
     search_result = []
     if debug:
         print([stemmer.stemWord(word) for word in words if word not in stopwords_set])
-    word_ids = [token_index_dict[stemmer.stemWord(word)] for word in words if word not in stopwords_set]
+    word_ids = (token_index_dict[stemmer.stemWord(word)] for word in words)
+    word_ids = [word_id for word_id in word_ids if word_id]
     index_entries = [index[i] for i in word_ids]
     first = list(set(word_ids))
     intersection = lookup_table[first.pop(), :].indices
@@ -174,4 +182,4 @@ def phrase_search(words: list[str], index: list[dict] | tuple[dict], debug: bool
 #     return valid
 
 if __name__ == "__main__":
-    print(len(bool_search("fine AND (okay AND good) AND happy")))
+    print(len(_bool_search("fine AND (okay AND good) AND happy")))

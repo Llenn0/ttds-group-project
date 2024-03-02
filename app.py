@@ -5,7 +5,7 @@ from flask import Flask, request
 import firebase_admin
 from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
-from run_semantic import SemanticSearch
+from cosine_semantic import SemanticSearch
 from google.cloud import storage
 from flask_cors import CORS
 
@@ -95,7 +95,7 @@ def semantic_search():
 def boolean_search():
     data = request.get_json()
     search = data["query"]
-    docIds, _ = bool_search(search)
+    docIds = bool_search(search)
 
     res_json = {"docIds" : [{"id" : "PG" + str(docId)} for docId in docIds]}
     return res_json
