@@ -5,7 +5,7 @@ from flask import Flask, request
 import firebase_admin
 from firebase_admin import firestore, credentials
 from dotenv import load_dotenv
-from run_semantic import SemanticSearch
+from cosine_semantic import SemanticSearch
 from google.cloud import storage
 from flask_cors import CORS
 
@@ -39,21 +39,23 @@ if not os.path.isfile('document_embeddings.pkl'):
 else:
     print("Found Semantic Embeddings File")
 
-if not os.path.isfile('lookup_table.npz'):
+if not os.path.isfile('KeywordSearch/lookup_table.npz'):
     blob = bucket.blob('lookup_table.npz')
-    blob.download_to_filename("lookup_table.npz")
+    blob.download_to_filename("KeywordSearch/lookup_table.npz")
     print("Lookup Table Downloaded.")
 else:
     print("Found Lookup Table File")
 
-if not os.path.isfile('all_tokens.pkl'):
+if not os.path.isfile('KeywordSearch/all_tokens.pkl'):
     blob = bucket.blob('all_tokens.pkl')
-    blob.download_to_filename("all_tokens.pkl")
+    blob.download_to_filename("KeywordSearch/all_tokens.pkl")
     print("All Tokens Downloaded.")
 else:
     print("Found All Tokens File")
 
 searcher = SemanticSearch()
+import KeywordSearch.loader as loader
+loader.init_module()
 from KeywordSearch.kwsearch import bool_search
 
 # Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
@@ -86,9 +88,7 @@ def semantic_search():
     results = searcher.runSearch(search)
     results = list(zip(*results))
     docIds, scores = list(results[0]), list(results[1])
-    for i in range(len(docIds)):
-        docIds[i] = {"id":docIds[i]}
-    res_json = {"docIds":docIds}
+    res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
     return res_json
 
 @app.route('/boolean', methods=["POST"])
@@ -97,7 +97,7 @@ def boolean_search():
     search = data["query"]
     docIds = bool_search(search)
 
-    res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
+    res_json = {"docIds" : [{"id" : "PG" + str(docId)} for docId in docIds]}
     return res_json
 
 # @app.route('/getdocs')

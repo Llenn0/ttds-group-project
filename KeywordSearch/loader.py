@@ -17,9 +17,9 @@ import nltk
 from Preprocessing import preprocess_ebooks
 
 # Paths
-LOOKUP_TABLE_PATH = "../lookup_table.npz"
-VALID_BOOKS_PATH = "processed_books.pkl"
-ALL_TOKENS_PATH = "all_tokens.pkl"
+LOOKUP_TABLE_PATH = "KeywordSearch/lookup_table.npz"
+VALID_BOOKS_PATH = "KeywordSearch/processed_books.pkl"
+ALL_TOKENS_PATH = "KeywordSearch/all_tokens.pkl"
 LOG_PATH = "kwsearch.log"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
 print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
@@ -239,13 +239,18 @@ def load_token_vocab(load_from: str="english_books.txt", k: int=500, offset: int
 
     return all_tokens
 
-def load_segment(path: str):
+def load_segment(path: str) -> list[dict]:
     with open(path, "rb") as f:
         return pickle.load(f)
+
+def load_dummy_segment(path: str) -> list[dict]:
+    with open(path, "rb") as f:
+        return [{k : None for k in token_dict.keys()} for token_dict in pickle.load(f)]
         
-def load_merged_index(dir_: str="index", save_merged: bool=False, max_workers: int=None):
+def load_merged_index(dir_: str="index", save_merged: bool=False, max_workers: int=None, dummy: bool=False):
     start_time = time.time()
 
+    load_func = load_dummy_segment if dummy else load_segment
     naming_regex = re.compile(r"([0-9]+)_merged.pkl")
     segments = [[int(naming_regex.fullmatch(filename).group(1)), filename] for filename in glob.glob("*_merged.pkl", root_dir=dir_)]
     segments.sort(key=lambda x: x[0])
@@ -262,7 +267,7 @@ def load_merged_index(dir_: str="index", save_merged: bool=False, max_workers: i
     complete_counter = 0
     index_dict = dict()
     with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as pool:
-        jobs = {pool.submit(load_segment, os.path.join(dir_, filename)) : segment_index
+        jobs = {pool.submit(load_func, os.path.join(dir_, filename)) : segment_index
                 for segment_index, filename in segments}
         for job in tqdm(concurrent.futures.as_completed(jobs), total=len(jobs), desc="Loading segments"):
             segment_index = jobs[job]
