@@ -57,6 +57,9 @@ searcher = SemanticSearch()
 import KeywordSearch.loader as loader
 loader.init_module()
 from KeywordSearch.kwsearch import bool_search
+from KeywordSearch.cloud_index import CloudIndex
+
+inverted_index = CloudIndex(coll)
 
 # Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
 def create_index():
@@ -95,8 +98,8 @@ def semantic_search():
 def boolean_search():
     data = request.get_json()
     search = data["query"]
-    docIds = bool_search(search)
-
+    docIds = bool_search(search, inverted_index)
+    inverted_index.cache.clear()
     res_json = {"docIds" : [{"id" : "PG" + str(docId)} for docId in docIds]}
     return res_json
 
