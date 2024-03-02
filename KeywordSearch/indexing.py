@@ -12,7 +12,7 @@ from collections import defaultdict
 import numpy as np
 from Stemmer import Stemmer
 
-from KeywordSearch.loader import token_dir, LOG_PATH, tqdm
+from KeywordSearch.loader import token_dir, LOG_PATH, index_dir, tqdm
 from KeywordSearch.utils import cast2intarr, save_in_batches, ZeroDict, save_json
 
 def return_dict():
@@ -114,8 +114,8 @@ def build_full_index(pool: concurrent.futures.ProcessPoolExecutor, offset: int=0
     gc.collect()
     
     if not skip_save:
-        if not os.path.exists("index"):
-            os.mkdir("index")
+        if not os.path.exists(index_dir):
+            os.makedirs(index_dir)
         try:
             if use_json:
                 save_json(sorted(done_jobs), f"done_jobs_{prefix}.json")
@@ -129,7 +129,7 @@ def build_full_index(pool: concurrent.futures.ProcessPoolExecutor, offset: int=0
         gc.collect()
     return index, books_to_index
 
-def merge_parts(parts: list[str], segment_index: str | int=-1, save_dir: str="index"):
+def merge_parts(parts: list[str], segment_index: str | int=-1, save_dir: str=index_dir):
     with open(parts.pop(), "rb") as f:
         index: Iterable[dict] = pickle.load(f)
     for part in parts:
@@ -143,7 +143,7 @@ def merge_parts(parts: list[str], segment_index: str | int=-1, save_dir: str="in
     del index
     gc.collect()
 
-def merge_index(dir: str="index", naming_rule: str=r"part([0-9]+)_inverted_([0-9]+).pkl"):
+def merge_index(dir: str=index_dir, naming_rule: str=r"part([0-9]+)_inverted_([0-9]+).pkl"):
     naming_regex = re.compile(naming_rule)
     index_segments = glob.glob(naming_rule.replace("([0-9]+)", '*'), root_dir=dir)
     lookup_table = defaultdict(lambda : list())

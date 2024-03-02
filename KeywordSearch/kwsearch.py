@@ -46,7 +46,7 @@ def update_index(processed_books, all_tokens):
     all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
     gc.collect()
 
-def bool_search(query: str, index: Iterable[dict], debug: bool=False):
+def bool_search(query: str, index: Iterable[dict]=None, debug: bool=False):
     query = unidecode(query)
     if regex_bool_op.search(query) is None:
         return phrase_search(regex_tokenise.findall(query.lower()), index, debug)
