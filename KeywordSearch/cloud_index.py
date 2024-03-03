@@ -65,7 +65,7 @@ def upload_firestore(content: DocSlice|DocIndex, index_api: firestore.Collection
         with open(LOG_PATH, 'a', encoding="UTF-8") as f:
             f.write(f"Upload firestore failure at {content.doc_name}:\n{''.join(traceback.format_exception(e))}\n")
         if failures < 50:
-            time.sleep(0.5 + random())
+            time.sleep(0.1)
             upload_firestore(content, index_api, failures + 1)
         else:
             raise e
