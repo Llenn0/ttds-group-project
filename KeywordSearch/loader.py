@@ -17,7 +17,7 @@ import nltk
 
 from Preprocessing import preprocess_ebooks
 
-isWin = platform.lower() == "win32"
+is_deployment = platform.lower() not in ("win32", "darwin")
 deployment_path = "/app/"
 
 # Paths
@@ -29,7 +29,7 @@ index_dir = "index/"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
 print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
 
-if not isWin:
+if is_deployment:
     LOOKUP_TABLE_PATH = deployment_path + LOOKUP_TABLE_PATH
     VALID_BOOKS_PATH = deployment_path + VALID_BOOKS_PATH
     ALL_TOKENS_PATH = deployment_path + ALL_TOKENS_PATH
@@ -85,12 +85,12 @@ def init_module():
     
     metadata, all_subjects = load_lan_dict()
 
-    if not isWin:
+    if is_deployment:
         token_dir = deployment_path + token_dir
         raw_dir = deployment_path + raw_dir
 
 def load_lan_dict(path: str="metadata/metadata.csv") -> tuple[defaultdict, dict]:
-    if not isWin:
+    if is_deployment:
         path = deployment_path + path
     extract_item = re.compile(r"\'(\w+)\'")
     lan_dict = defaultdict(lambda : set())
@@ -265,7 +265,7 @@ def load_dummy_segment(path: str) -> list[dict]:
         return [{k : v.shape[0] for k, v in token_dict.items()} for token_dict in pickle.load(f)]
         
 def load_merged_index(dir_: str=index_dir, save_merged: bool=False, max_workers: int=None, dummy: bool=False):
-    if not isWin:
+    if is_deployment:
         dir_ = deployment_path + dir_
     start_time = time.time()
 
