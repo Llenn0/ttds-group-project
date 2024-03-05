@@ -10,14 +10,15 @@ import concurrent.futures
 from sys import platform
 from collections import defaultdict
 
+from unidecode import unidecode, unidecode_expect_nonascii
 from nltk.corpus import stopwords
 from Stemmer import Stemmer
 from tqdm import tqdm
 import nltk
 
-from Preprocessing import preprocess_ebooks
+from Preprocessing import preprocess_ebooks, stopwords_available
 
-isWin = platform.lower() == "win32"
+is_deployment = platform.lower() not in ("win32", "darwin")
 deployment_path = "/app/"
 
 # Paths
@@ -29,7 +30,7 @@ index_dir = "index/"
 print("Please ignore the syntax warnings as small integers in CPython are singletons")
 print("Using `is` instead of `=` for comparison in performance-critical code is acceptable")
 
-if not isWin:
+if is_deployment:
     LOOKUP_TABLE_PATH = deployment_path + LOOKUP_TABLE_PATH
     VALID_BOOKS_PATH = deployment_path + VALID_BOOKS_PATH
     ALL_TOKENS_PATH = deployment_path + ALL_TOKENS_PATH
@@ -41,7 +42,7 @@ nltk.download('stopwords')
 def init_module():
     global processed_books, raw_dir, token_dir, index_dir
     global stopwords_set, stemmer, processed_books, all_tokens, tokens_fetched, language_code
-    global metadata, all_subjects
+    global metadata, all_subjects, all_languages, stopwords_dict, lan_dict, sub_dict
 
     try:
         with open(VALID_BOOKS_PATH, 'rb') as f:
@@ -58,7 +59,6 @@ def init_module():
         token_dir = ''
 
     raw_dir = token_dir.replace("ttds-tokens", "raw")
-    stopwords_set = frozenset(stopwords.words("english"))
     stemmer = Stemmer("english")
 
     if not os.path.exists(token_dir):
@@ -73,8 +73,8 @@ def init_module():
     
     tokens_fetched = processed_books and all_tokens
 
-    if os.path.exists(LOG_PATH) and os.path.isfile(LOG_PATH):
-        os.remove(LOG_PATH)
+    # if os.path.exists(LOG_PATH) and os.path.isfile(LOG_PATH):
+    #     os.remove(LOG_PATH)
     
     with open("language-codes.csv", 'r', encoding="utf-8") as f:
         f.readline()
@@ -83,19 +83,29 @@ def init_module():
         tmp = ((code, regex_extract.split(lan)[0].lower()) for code, lan in reader)
         language_code = defaultdict((lambda : "english"), tmp)
     
-    metadata, all_subjects = load_lan_dict()
+    metadata, all_subjects, all_languages, lan_dict, sub_dict, all_lan_single = load_meta()
 
-    if not isWin:
+    if is_deployment:
         token_dir = deployment_path + token_dir
         raw_dir = deployment_path + raw_dir
+    
+    stopwords_dict = {lan : frozenset(stopwords.words(lan)) 
+                      for lan in stopwords_available if lan in all_lan_single}
+    print("All languages:", sorted(all_lan_single))
+    stopwords_set = stopwords_dict["english"]
+    stopwords_dict["chinese"] = frozenset(unidecode_expect_nonascii("\n".join(stopwords.words("chinese"))).lower().splitlines())
 
-def load_lan_dict(path: str="metadata/metadata.csv") -> tuple[defaultdict, dict]:
-    if not isWin:
+def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defaultdict, defaultdict, set]:
+    if is_deployment:
         path = deployment_path + path
     extract_item = re.compile(r"\'(\w+)\'")
     lan_dict = defaultdict(lambda : set())
-    sub_dict = dict()
+    sub_dict = defaultdict(lambda : set())
+    title_author_dict = dict()
+    author_dict = dict()
+    sub_inverted_dict = dict()
     all_lan = set()
+    all_lan_single = set()
     all_sub = set()
     meta = dict()
     with open(path, 'r', encoding="utf-8", errors="ignore") as f:
@@ -104,26 +114,34 @@ def load_lan_dict(path: str="metadata/metadata.csv") -> tuple[defaultdict, dict]
         records = [
             (
                 int(record[0][2:]), 
-                tuple(language_code[lan] for lan in extract_item.findall(record[5])),
-                sorted(extract_item.findall(record[7].casefold()))
+                tuple(language_code[lan].casefold() for lan in extract_item.findall(record[5])),
+                sorted(extract_item.findall(record[7].casefold())),
+                record[1],
+                record[2]
             ) for record in reader
         ]
     
-    for book_id, languages, subjects in records:
+    for book_id, languages, subjects, title, author in records:
         lan_dict[languages].add(book_id)
+        title_author_dict[book_id] = (title, author)
         all_lan.add(languages)
+        all_lan_single.update(languages)
         all_sub.update(subjects)
     
     # Memory-saving measure: use the same string object for same subject across all books
     all_sub_sorted = sorted(all_sub)
-    for book_id, _, subjects in records:
-        sub_dict[book_id] = tuple(all_sub_sorted[all_sub_sorted.index(sub)] for sub in subjects)
+    for book_id, _, subjects, _, _ in records:
+        subjects = tuple(all_sub_sorted[all_sub_sorted.index(sub)] for sub in subjects)
+        for sub in subjects:
+            sub_dict[sub].add(book_id)
+        sub_inverted_dict[book_id] = subjects
     
     for lan in all_lan:
         for book_id in lan_dict[lan]:
-            meta[book_id] = (lan, sub_dict[book_id])
-
-    return meta, all_sub_sorted
+            title, author = title_author_dict[book_id]
+            meta[book_id] = (lan, sub_inverted_dict[book_id], title, author)
+    
+    return meta, all_sub_sorted, sorted(all_lan), lan_dict, sub_dict, all_lan_single
 
 def process_first_k_books(k: int=-1, offset: int=0, batch_size=500):
     global processed_books
@@ -262,10 +280,10 @@ def load_segment(path: str) -> list[dict]:
 
 def load_dummy_segment(path: str) -> list[dict]:
     with open(path, "rb") as f:
-        return [{k : None for k in token_dict.keys()} for token_dict in pickle.load(f)]
+        return [{k : v.shape[0] for k, v in token_dict.items()} for token_dict in pickle.load(f)]
         
 def load_merged_index(dir_: str=index_dir, save_merged: bool=False, max_workers: int=None, dummy: bool=False):
-    if not isWin:
+    if is_deployment:
         dir_ = deployment_path + dir_
     start_time = time.time()
 

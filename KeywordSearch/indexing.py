@@ -38,6 +38,53 @@ def build_inverted_index_batch(job_infos: list[int], token_index_dict: dict,
 
     return index
 
+def count_document_length_batch(job_infos: list[int]) -> list[dict] | defaultdict[int, dict]:
+    counts = [None] * len(job_infos)
+
+    if counts:
+        tokenised_text_dir = token_dir + "PG%d_tokens.txt"
+        for i, book_id in enumerate(job_infos):
+            with open(tokenised_text_dir % book_id, 'r', encoding="UTF-8", errors="ignore") as f:
+                num_tokens = len(f.read().splitlines())
+            counts[i] = num_tokens
+        gc.collect()
+
+    return counts
+
+def fetch_all_doc_length(batch_size: int=50, **kwargs) -> dict[int, int]:
+    books_to_count = [int(fname.split('_')[0][2:]) for fname in glob.glob("PG*_tokens.txt", root_dir=token_dir)]
+    books_to_count.sort()
+
+    batches = []
+    num_books = len(books_to_count)
+    num_batches = num_books // batch_size
+    if num_books % batch_size:
+        num_batches += 1
+    
+    for i in range(num_batches):
+        start = i * batch_size
+        end = min(num_books, start + batch_size)
+        batches.append(books_to_count[start:end])
+    
+    length = {book_id : 0 for book_id in books_to_count}
+
+    with concurrent.futures.ProcessPoolExecutor(**kwargs) as pool:
+        with tqdm(total=num_books, desc="Counting books") as pbar:
+            jobs = {pool.submit(count_document_length_batch, job_infos) : job_infos 
+                    for job_infos in batches}
+            
+            for job in concurrent.futures.as_completed(jobs):
+                books_counted = jobs[job]
+                try:
+                    for book_id, book_length in zip(books_counted, job.result()):
+                        length[book_id] = book_length
+                except Exception as e:
+                    with open(LOG_PATH, 'a', encoding="UTF-8") as f:
+                        f.write(f"Count document length failure at {books_counted}:\n{''.join(traceback.format_exception(e))}\n")
+                pbar.update(len(books_counted))
+    
+    return length
+
 def build_full_index(pool: concurrent.futures.ProcessPoolExecutor, offset: int=0, k: int=-1, batch_size: int=50, index_type: str="inverted", 
                      prefix: str="", skip_save: bool=False, use_json: bool=False) -> tuple[list, list]:
     assert index_type in ("bow", "inverted"), "index_type must be \"bow\" or \"inverted\""

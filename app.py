@@ -1,6 +1,8 @@
 import os
 import sys
 import pickle
+import time
+
 from flask import Flask, request
 import firebase_admin
 from firebase_admin import firestore, credentials
@@ -9,9 +11,10 @@ from cosine_semantic import SemanticSearch
 from google.cloud import storage
 from flask_cors import CORS
 
+# Load Environment Variables
 load_dotenv()
 
-# Use a service account.
+# Use a service account defined by credentials.json in development and a server environment variable in production
 if os.getenv("ENV") == "DEV":
     print("Running in Dev")
     cred = credentials.Certificate('credentials.json')
@@ -23,12 +26,15 @@ else:
     print("ERROR IN ENVIRONMENT VARIABLES")
     sys.exit(1)
 
+# Initialise Firestore
 db = firestore.client()
 coll = db.collection('index')
 
+# Initialise Flask
 app = Flask(__name__)
 CORS(app)
 
+# Download required files from Cloud Storage
 print("Downloading Semantic Embeddings...")
 storage_client = storage.Client(project='moonlit-oven-412316')
 bucket = storage_client.bucket('ttds-static')
@@ -53,52 +59,98 @@ if not os.path.isfile('KeywordSearch/all_tokens.pkl'):
 else:
     print("Found All Tokens File")
 
+# Initialise and load search modules
 searcher = SemanticSearch()
 import KeywordSearch.loader as loader
+
 loader.init_module()
 from KeywordSearch.kwsearch import bool_search
+from KeywordSearch.cloud_index import CloudIndex
 
-# Adds files from pickle to the server - ONLY FOR TESTING PURPOSES
-def create_index():
-    with open("inverted_index.pkl", "rb") as f:
-        ebooks = pickle.load(f)
-        for i in range(0, len(ebooks)):
-            if ebooks[i] != {}:
-                data_array = []
-                for (k, v) in ebooks[i].items():
-                    item_string = f"{str(k)}:"
-                    for hit in v:
-                        item_string += f" {str(hit)}"
-                    data_array.append(item_string)
-                data = {"appears_in": data_array}
-                print(f"Writing data for doc id {i}")
-                coll.document(str(i)).set(data)
+inverted_index = CloudIndex(coll, size_limit=10000)
+
 @app.route('/')
 def hello_world():
     return 'Hello, World!'
+
 
 @app.route('/hello')
 def hello():
     return 'world!'
 
+
 @app.route('/semantic', methods=["POST"])
 def semantic_search():
     data = request.get_json()
+
     search = data["query"]
+    languages = data["languages"]
+    subjects = data["subjects"]
+    page = data["page"]
+    numPerPage = data["numPerPage"]
+    startNum = (page-1) * numPerPage
+    endNum = startNum + numPerPage
+
+    start = time.time()
     results = searcher.runSearch(search)
+    queryTime = time.time() - start
+
     results = list(zip(*results))
     docIds, scores = list(results[0]), list(results[1])
-    res_json = {"docIds" : [{"id" : docId} for docId in docIds]}
+    totalNum = len(docIds)
+
+    res_json = {"books": [{"id": docId, "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
+
 
 @app.route('/boolean', methods=["POST"])
 def boolean_search():
     data = request.get_json()
-    search = data["query"]
-    docIds = bool_search(search)
 
-    res_json = {"docIds" : [{"id" : "PG" + str(docId)} for docId in docIds]}
+    search = data["query"]
+    languages = data["languages"]
+    subjects = data["subjects"]
+    page = data["page"]
+    numPerPage = data["numPerPage"]
+    startNum = (page-1) * numPerPage
+    endNum = startNum + numPerPage
+
+    start = time.time()
+    docIds = bool_search(search, inverted_index, languages, subjects)
+    queryTime = time.time() - start
+
+    inverted_index.gc()
+    totalNum = len(docIds)
+    res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
+                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
+                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
+                           for docId in docIds[startNum:min(endNum, len(docIds))]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
+
+@app.route('/phrase', methods=["POST"])
+def phrase_search():
+    data = request.get_json()
+
+    search = data["query"]
+    languages = data["languages"]
+    subjects = data["subjects"]
+    page = data["page"]
+    numPerPage = data["numPerPage"]
+    startNum = (page-1) * numPerPage
+    endNum = startNum + numPerPage
+
+    start = time.time()
+    docIds = bool_search(search, inverted_index, languages, subjects)
+    queryTime = time.time() - start
+
+    inverted_index.gc()
+    totalNum = len(docIds)
+    res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2],
+                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]),
+                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])}
+                           for docId in docIds[startNum:min(endNum, len(docIds))]], "queryTime": queryTime, "totalNum": totalNum}
+    return res_json
+
 
 # @app.route('/getdocs')
 # def docs():
@@ -113,7 +165,6 @@ def boolean_search():
 #                 response += (hit + "<br>")
 #         response += "<br>"
 #     return response
-
 
 
 if __name__ == '__main__':

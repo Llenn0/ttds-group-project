@@ -49,16 +49,19 @@ def get_new_book(book_id: int) -> int:
 
     return r.status_code
 
-def construct_bool_table(index: Iterable[dict], all_tokens: tuple[str], valid_books: Iterable[int]=None):
+def construct_bool_table(index: Iterable[dict], all_tokens: tuple[str], valid_books: Iterable[int]=None, 
+                         exclude=[(1, 4656), (3336040, 4656), (463511, 4656)]):
     if valid_books is None:
         with open(VALID_BOOKS_PATH, "rb") as f:
             valid_books = tuple(pickle.load(f))
-    table = scipy.sparse.dok_matrix((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
+    table = scipy.sparse.dok_array((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
     del valid_books
     length = len(all_tokens)
     for token_id, token_dict in tqdm(enumerate(index[:length]), desc="Constructing lookup table", total=length):
         if token_dict:
             table[token_id, tuple(token_dict.keys())] = True
+    for token_id, book_id in exclude:
+        del table[token_id, book_id]
     gc.collect()
     table = table.tocsr()
     print("Finished converting lookup table to CSR format", flush=True)
@@ -255,3 +258,9 @@ def pickle_to_json(naming_pattern: str=r"([0-9]+)_merged.pkl", dir_: str=index_d
 class ZeroDict(dict):
     def __missing__(self, _):
         return 0
+
+def dict2arr(data: dict[int, int|float], dtype: np.dtype) -> np.ndarray:
+    keys = list(data.keys())
+    arr = np.zeros(max(keys) + 1, dtype=np.float32)
+    arr[keys] = list(data.values())
+    return arr
