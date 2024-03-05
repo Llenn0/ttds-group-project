@@ -100,7 +100,7 @@ def semantic_search():
     docIds, scores = list(results[0]), list(results[1])
     totalNum = len(docIds)
 
-    res_json = {"books": [{"id": docId} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
+    res_json = {"books": [{"id": docId, "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
 
@@ -122,7 +122,7 @@ def boolean_search():
 
     inverted_index.cache.clear()
     totalNum = len(docIds)
-    res_json = {"books": [{"id": "PG" + str(docId)} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
+    res_json = {"books": [{"id": "PG" + str(docId), "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
 
