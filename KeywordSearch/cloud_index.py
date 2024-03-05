@@ -122,7 +122,7 @@ class CloudDoc:
         self.index_api = index_api
         self.doc_name = str(token_id) + '_%d'
         if cloud_dict is None:
-            cloud_dict = self.index_api.document(self.doc_name[:-3]).get().to_dict()
+            cloud_dict = self.index_api.document(self.doc_name[:-3]).get(timeout=10).to_dict()
         self.is_segmented = 'd' not in cloud_dict
         self.header = np.array(cloud_dict['h'], dtype=np.uint32)
         self.accessed_slice = set()
@@ -149,7 +149,7 @@ class CloudDoc:
             best_guess = self.header.searchsorted(i)
             if best_guess in self.accessed_slice:
                 return False
-            guessed_slice = self.index_api.document(self.doc_name %(best_guess)).get().to_dict()
+            guessed_slice = self.index_api.document(self.doc_name %(best_guess)).get(timeout=10).to_dict()
             contained_entries = set(guessed_slice['h'])
             self.known_keys.update(dict.fromkeys(guessed_slice['h'], guessed_slice))
             self.accessed_slice.add(best_guess)
@@ -189,7 +189,7 @@ class CloudDoc:
             slice_id = self.known_keys[i] if i in self.known_keys else (self.header.searchsorted(i) - 1)
             if slice_id < 0:
                 return np.array([], dtype=np.uint32)
-            fetched_slice = self.index_api.document(self.doc_name + '_' + str(slice_id)).get().to_dict()
+            fetched_slice = self.index_api.document(self.doc_name + '_' + str(slice_id)).get(timeout=10).to_dict()
             if 'd' in fetched_slice:
                 for k, v in zip(fetched_slice['h'], fetched_slice['d']):
                     self.positions_cache[k] = np.array(json.loads(v), dtype=np.uint32)
