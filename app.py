@@ -121,6 +121,7 @@ def boolean_search():
 
     start = time.time()
     docIds = boolean_search_cache.get(search_query, None)
+    err_msg = "No error"
     if docIds is None:
         if len(boolean_search_cache) > boolean_search_cache_limit:
             oldest_result = list(boolean_search_cache.keys())[0]
@@ -128,7 +129,8 @@ def boolean_search():
         try:
             boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
         except Exception as e:
-            print('\n'.join(traceback.format_exception(e)))
+            err_msg = '\n'.join(traceback.format_exception(e))
+            print(err_msg)
             docIds = []
         else:
             docIds = boolean_search_cache[search_query]
@@ -139,7 +141,7 @@ def boolean_search():
     res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
                            "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
                            "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
-                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum}
+                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
     return res_json
 
 @app.route('/phrase', methods=["POST"])
@@ -157,6 +159,7 @@ def phrase_search():
 
     start = time.time()
     docIds = boolean_search_cache.get(search_query, None)
+    err_msg = "No error"
     if docIds is None:
         if len(boolean_search_cache) > boolean_search_cache_limit:
             oldest_result = list(boolean_search_cache.keys())[0]
@@ -164,7 +167,8 @@ def phrase_search():
         try:
             boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
         except Exception as e:
-            print('\n'.join(traceback.format_exception(e)))
+            err_msg = '\n'.join(traceback.format_exception(e))
+            print(err_msg)
             docIds = []
         else:
             docIds = boolean_search_cache[search_query]
@@ -172,10 +176,10 @@ def phrase_search():
 
     inverted_index.gc()
     totalNum = len(docIds)
-    res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2],
-                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]),
-                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])}
-                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum}
+    res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
+                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
+                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
+                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
     return res_json
 
 
