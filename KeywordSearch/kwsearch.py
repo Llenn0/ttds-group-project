@@ -8,10 +8,11 @@ import scipy.sparse
 from unidecode import unidecode
 
 from KeywordSearch import utils
-from KeywordSearch.loader import stemmer, processed_books, all_tokens, stopwords_set, LOOKUP_TABLE_PATH
+from KeywordSearch.cloud_index import CloudIndex
+from KeywordSearch.loader import stemmer, processed_books, all_tokens, stopwords_set, stopwords_dict, lan_dict, sub_dict, LOOKUP_TABLE_PATH
 
 # Sparse look-up table aids boolean search
-lookup_table: scipy.sparse.csr_matrix | None
+lookup_table: scipy.sparse.csr_array | None
 try:
     lookup_table = scipy.sparse.load_npz(LOOKUP_TABLE_PATH)
 except:
@@ -46,10 +47,19 @@ def update_index(processed_books, all_tokens):
     all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
     gc.collect()
 
-def bool_search(query: str, index: Iterable[dict]=None, debug: bool=False):
+def bool_search(query: str, index: Iterable[dict], lans, subs, debug: bool=False):
     query = unidecode(query)
+    # all_elem = set()
+    # for lan in lans:
+    #     all_elem.update(lan_dict[lan])
+    # for sub in subs:
+    #     all_elem.update(sub_dict[sub])
+    current_stopwords = set()
+    for lan in lans:
+        if lan in stopwords_dict:
+            current_stopwords.update(stopwords_dict[lan])
     if regex_bool_op.search(query) is None:
-        return phrase_search(regex_tokenise.findall(query.lower()), index, debug)
+        return phrase_search_cloud([word for word in regex_tokenise.findall(query.lower()) if word not in current_stopwords], index, 3, debug)
     else:
         return _bool_search(query, debug)[0]
 
@@ -163,6 +173,54 @@ def phrase_search(words: list[str], index: Iterable[dict], debug: bool=False):
                 i = np.searchsorted(matches, entry, side="right")
                 i[i==0] = 1
                 matches = entry[matches[i-1] == entry-1]
+                if not matches.any():
+                    break
+            else:
+                search_result.append(docID)
+    return set(search_result)
+
+def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, debug: bool=False) -> Iterable[int]:
+    search_result = []
+    if debug:
+        print(stemmer.stemWords(words))
+    raw_word_ids = (token_index_dict[stemmer.stemWord(word)] for word in words)
+    raw_word_ids = tuple(word_id for word_id in raw_word_ids if word_id)
+    word_ids = set(raw_word_ids)
+    if len(word_ids) == 0:
+        return set()
+    all_ids = list(word_ids)
+    intersection = lookup_table[all_ids.pop(), :].indices
+    for token_id in all_ids:
+        intersection = np.intersect1d(intersection, lookup_table[token_id, :].indices, assume_unique=True)
+    index.preallocate(intersection)
+
+    num_words = len(raw_word_ids)
+    if num_words > 30:
+        index_entries = []
+        num_batches = num_words // 30
+        if num_words % 30:
+            num_batches += 1
+        for i in range(num_batches):
+            start = i * 30
+            end = min(num_words, start + 30)
+            index_entries += index[raw_word_ids[start:end]]
+    else:
+        index_entries = index[raw_word_ids]
+
+    for docID in intersection:
+        occurs = (entry[docID] for entry in index_entries) # use generator to avoid wasting time on non-matches
+        first = next(occurs)
+        second = next(occurs)
+        i = np.searchsorted(first, second, side="left")
+        i[i==0] = 1
+        matches: np.ndarray = second[(second - first[i-1]) <= max_dist]
+        del first, second
+
+        if matches.shape[0]:
+            for entry in occurs:
+                i = np.searchsorted(matches, entry, side="right")
+                i[i==0] = 1
+                matches = entry[(entry - matches[i-1]) <= max_dist]
                 if not matches.any():
                     break
             else:
