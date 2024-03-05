@@ -1,7 +1,7 @@
 import json
 import time
 import traceback
-from random import random
+import gzip
 
 import numpy as np
 from google.cloud import firestore
@@ -23,8 +23,9 @@ class DocSlice:
 
         Document Structure:
         {
-            "h" : Array[Integer]    # Book IDs
-            "d" : Array[String]     # The token's Positions in each Book
+            "h" : Array[Integer]    # Header:  Book IDs
+            "d" : Array[String]     # Data:    The token's Positions in each Book
+            "b" : Array[Bytes]      # Bytes: Whether the data array has been compressed
         }
         """
         self.doc_name = f"{token_id}_{slice_id}"
@@ -32,13 +33,14 @@ class DocSlice:
         self.size += doc_padding
         self.header = []
         self.data = []
+        self.is_compressed = False
 
     def rm_slice_id(self):
         assert '_' in self.doc_name
         self.doc_name, slice_id_str = self.doc_name.split('_')
         self.size -= (len(slice_id_str) + 1)
 
-    def try_add(self, key: int, data_str: str):
+    def try_add(self, key: int, data_str: str|bytes):
         additional_size = len(data_str) + 9 # 8 for integer key, 1 for string terminator
         if self.size + additional_size < SIZE_LIMIT:
             self.size += additional_size
@@ -47,8 +49,16 @@ class DocSlice:
             return True
         return False
     
+    def try_add_compressed(self, key: int, data_str: str):
+        data_byte = gzip.compress(data_str.encode("ascii"))
+        self.is_compressed = True
+        return self.try_add(key, data_byte)
+    
     def to_dict(self):
-        return {'h' : self.header, 'd' : self.data}
+        if self.is_compressed:
+            return {'h' : self.header, 'b' : self.data}
+        else:
+            return {'h' : self.header, 'd' : self.data}
 
 class DocIndex:
     def __init__(self, token_id: int, slices: list[DocSlice]):
@@ -81,9 +91,23 @@ def prepare_tokendict_for_upload(token_dict: dict[str, np.ndarray[int]], token_i
         if not slice.try_add(k, content_str):
             is_small_upload = False
             to_upload.append(slice)
+            # Exception handing for the first entry being > 1 MiB
+            if not slice.data:
+                slice.try_add(-1, "[]")
             slice_id += 1
             slice = DocSlice(token_id, slice_id)
             all_slices.append(slice)
+            if not slice.try_add(k, content_str):
+                with open(LOG_PATH, 'a', encoding="UTF-8") as f:
+                    f.write(f"WARNING: Entry at token {token_id}, book {k} too large: {len(content_str)}, try compression\n")
+                if slice.try_add_compressed(k, content_str):
+                    to_upload.append(slice)
+                    slice_id += 1
+                    slice = DocSlice(token_id, slice_id)
+                    all_slices.append(slice)
+                else:
+                    with open(LOG_PATH, 'a', encoding="UTF-8") as f:
+                        f.write(f"ERROR: Entry at token {token_id}, book {k} can't fit after compression\n")
     if is_small_upload:
         slice.rm_slice_id()
     else:
@@ -96,15 +120,17 @@ class CloudIndexDict(dict):
         self.index_api = index_api
         super().__init__(self)
     def __missing__(self, key):
-        self[key] = CloudDoc(self.index_api, key)
-        return self[key]
+        if isinstance(key, int):
+            self[key] = CloudDoc(self.index_api, key)
+            return self[key]
 
 class CloudDoc:
-    def __init__(self, index_api: firestore.CollectionReference, token_id: int):
+    def __init__(self, index_api: firestore.CollectionReference, token_id: int, cloud_dict: dict=None):
         self.index_api = index_api
         self.doc_name = str(token_id)
-        cloud_dict = self.index_api.document(self.doc_name).get().to_dict()
-        self.is_segmented = 'd' in cloud_dict
+        if cloud_dict is None:
+            cloud_dict = self.index_api.document(self.doc_name).get().to_dict()
+        self.is_segmented = 'd' not in cloud_dict
         self.header = np.array(cloud_dict['h'], dtype=np.uint32)
         self.accessed_slice = set()
         self.positions_cache = dict()
@@ -142,9 +168,12 @@ class CloudDoc:
             fetched_slice = self.index_api.document(self.doc_name + '_' + str(slice_id)).get().to_dict()
             contained_entries = fetched_slice['h']
             slice_index = contained_entries.index(i)
-            arr = np.array(json.loads(fetched_slice['d'][slice_index]), dtype=np.uint32) # uint64 is probably faster?
+            if 'b' in fetched_slice:
+                arr = np.array(json.loads(gzip.decompress(fetched_slice['d'][0])), dtype=np.uint64)
+            else:
+                arr = np.array(json.loads(fetched_slice['d'][slice_index]), dtype=np.uint64) # uint64 is probably faster?
         else:
-            arr = np.array(json.loads(self.data[self.header.searchsorted(i)]), dtype=np.uint32) # uint64 is probably faster?
+            arr = np.array(json.loads(self.data[self.header.searchsorted(i)]), dtype=np.uint64) # uint64 is probably faster?
         
         self.positions_cache[i] = arr # cache result
         return arr

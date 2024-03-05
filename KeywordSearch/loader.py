@@ -73,8 +73,8 @@ def init_module():
     
     tokens_fetched = processed_books and all_tokens
 
-    if os.path.exists(LOG_PATH) and os.path.isfile(LOG_PATH):
-        os.remove(LOG_PATH)
+    # if os.path.exists(LOG_PATH) and os.path.isfile(LOG_PATH):
+    #     os.remove(LOG_PATH)
     
     with open("language-codes.csv", 'r', encoding="utf-8") as f:
         f.readline()
