@@ -2,6 +2,7 @@ import os
 import sys
 import pickle
 import time
+import traceback
 
 from flask import Flask, request
 import firebase_admin
@@ -124,8 +125,13 @@ def boolean_search():
         if len(boolean_search_cache) > boolean_search_cache_limit:
             oldest_result = list(boolean_search_cache.keys())[0]
             del boolean_search_cache[oldest_result]
-        boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
-        docIds = boolean_search_cache[search_query]
+        try:
+            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
+        except Exception as e:
+            print('\n'.join(traceback.format_exception(e)))
+            docIds = []
+        else:
+            docIds = boolean_search_cache[search_query]
     queryTime = time.time() - start
 
     inverted_index.gc()
@@ -155,8 +161,13 @@ def phrase_search():
         if len(boolean_search_cache) > boolean_search_cache_limit:
             oldest_result = list(boolean_search_cache.keys())[0]
             del boolean_search_cache[oldest_result]
-        boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
-        docIds = boolean_search_cache[search_query]
+        try:
+            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
+        except Exception as e:
+            print('\n'.join(traceback.format_exception(e)))
+            docIds = []
+        else:
+            docIds = boolean_search_cache[search_query]
     queryTime = time.time() - start
 
     inverted_index.gc()

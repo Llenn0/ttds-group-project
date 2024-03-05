@@ -170,7 +170,7 @@ class CloudDoc:
                 start = i * 30
                 end = min(num_new_slices, start + 30)
                 names_to_fetch = (self.doc_name %(i) for i in slices_to_alloc[start:end])
-                for doc_ref in self.index_api.where("__name__", "in", value=names_to_fetch).limit(len(slices_to_alloc)).stream():
+                for doc_ref in self.index_api.where("__name__", "in", value=names_to_fetch).limit(len(slices_to_alloc)).stream(timeout=10):
                     fetched_slice = doc_ref.to_dict()
                     if 'd' in fetched_slice:
                         for k, v in zip(fetched_slice['h'], fetched_slice['d']):
@@ -221,7 +221,7 @@ class CloudIndexDict(dict):
         else:
             str_keys = [str(k) for k in key if k not in self]
             if str_keys:
-                for doc_ref in self.index_api.where("__name__", "in", value=str_keys).limit(len(key)).stream():
+                for doc_ref in self.index_api.where("__name__", "in", value=str_keys).limit(len(key)).stream(timeout=10):
                     k = int(doc_ref.id)
                     self[k] = CloudDoc(self.index_api, k, pre_alloc=self.pre_alloc, cloud_dict=doc_ref.to_dict())
             return [self[k] for k in key]
