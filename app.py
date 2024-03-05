@@ -127,6 +127,30 @@ def boolean_search():
                            for docId in docIds[startNum:min(endNum, len(docIds))]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
+@app.route('/phrase', methods=["POST"])
+def phrase_search():
+    data = request.get_json()
+
+    search = data["query"]
+    languages = data["languages"]
+    subjects = data["subjects"]
+    page = data["page"]
+    numPerPage = data["numPerPage"]
+    startNum = (page-1) * numPerPage
+    endNum = startNum + numPerPage
+
+    start = time.time()
+    docIds = bool_search(search, inverted_index, languages, subjects)
+    queryTime = time.time() - start
+
+    inverted_index.gc()
+    totalNum = len(docIds)
+    res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2],
+                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]),
+                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])}
+                           for docId in docIds[startNum:min(endNum, len(docIds))]], "queryTime": queryTime, "totalNum": totalNum}
+    return res_json
+
 
 # @app.route('/getdocs')
 # def docs():
