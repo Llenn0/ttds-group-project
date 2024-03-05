@@ -68,6 +68,8 @@ from KeywordSearch.kwsearch import bool_search
 from KeywordSearch.cloud_index import CloudIndex
 
 inverted_index = CloudIndex(coll, size_limit=10000)
+boolean_search_cache = dict()
+boolean_search_cache_limit = 20
 
 @app.route('/')
 def hello_world():
@@ -105,9 +107,10 @@ def semantic_search():
 
 @app.route('/boolean', methods=["POST"])
 def boolean_search():
-    data = request.get_json()
+    global boolean_search_cache
 
-    search = data["query"]
+    data = request.get_json()
+    search_query = data["query"]
     languages = data["languages"]
     subjects = data["subjects"]
     page = data["page"]
@@ -116,7 +119,13 @@ def boolean_search():
     endNum = startNum + numPerPage
 
     start = time.time()
-    docIds = bool_search(search, inverted_index, languages, subjects)
+    docIds = boolean_search_cache.get(search_query, None)
+    if docIds is None:
+        if len(boolean_search_cache) > boolean_search_cache_limit:
+            oldest_result = list(boolean_search_cache.keys())[0]
+            del boolean_search_cache[oldest_result]
+        boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
+        docIds = boolean_search_cache[search_query]
     queryTime = time.time() - start
 
     inverted_index.gc()
@@ -124,14 +133,15 @@ def boolean_search():
     res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
                            "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
                            "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
-                           for docId in docIds[startNum:min(endNum, len(docIds))]], "queryTime": queryTime, "totalNum": totalNum}
+                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
 @app.route('/phrase', methods=["POST"])
 def phrase_search():
-    data = request.get_json()
+    global boolean_search_cache
 
-    search = data["query"]
+    data = request.get_json()
+    search_query = data["query"]
     languages = data["languages"]
     subjects = data["subjects"]
     page = data["page"]
@@ -140,7 +150,13 @@ def phrase_search():
     endNum = startNum + numPerPage
 
     start = time.time()
-    docIds = bool_search(search, inverted_index, languages, subjects)
+    docIds = boolean_search_cache.get(search_query, None)
+    if docIds is None:
+        if len(boolean_search_cache) > boolean_search_cache_limit:
+            oldest_result = list(boolean_search_cache.keys())[0]
+            del boolean_search_cache[oldest_result]
+        boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
+        docIds = boolean_search_cache[search_query]
     queryTime = time.time() - start
 
     inverted_index.gc()
@@ -148,7 +164,7 @@ def phrase_search():
     res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2],
                            "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]),
                            "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])}
-                           for docId in docIds[startNum:min(endNum, len(docIds))]], "queryTime": queryTime, "totalNum": totalNum}
+                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
 
