@@ -140,6 +140,14 @@ class CloudDoc:
         
         self.access = 0
 
+    def clear(self) -> int:
+        slices_deleted = 0
+        if self.is_segmented:
+            slices_deleted = len(self.accessed_slice)
+            self.accessed_slice = set()
+            self.positions_cache = dict()
+            self.known_keys = {first_book_id : i for i, first_book_id in enumerate(self.header.tolist())}
+        return slices_deleted
 
     def __contains__(self, i: int) -> bool:
         if i in self.known_keys:
@@ -172,6 +180,7 @@ class CloudDoc:
                 names_to_fetch = (self.doc_name %(i) for i in slices_to_alloc[start:end])
                 for doc_ref in self.index_api.where("__name__", "in", value=names_to_fetch).limit(len(slices_to_alloc)).stream(timeout=10):
                     fetched_slice = doc_ref.to_dict()
+                    self.accessed_slice.add(int(doc_ref.id.split('_')[1]))
                     if 'd' in fetched_slice:
                         for k, v in zip(fetched_slice['h'], fetched_slice['d']):
                             self.positions_cache[k] = np.array(json.loads(v), dtype=np.uint32)
@@ -227,7 +236,7 @@ class CloudIndexDict(dict):
             return [self[k] for k in key]
 
 class CloudIndex:
-    def __init__(self, collection_: firestore.CollectionReference, size_limit: int=10000) -> None:
+    def __init__(self, collection_: firestore.CollectionReference, size_limit: int=5000) -> None:
         self.index_api = collection_
         self.size_limit = size_limit
         self.cache = CloudIndexDict(self.index_api)
@@ -236,9 +245,18 @@ class CloudIndex:
     def preallocate(self, docIds: list[int]):
         self.cache.pre_alloc = docIds
     def gc(self):
-        num_deletion = len(self.cache) - self.size_limit
+        current_slice_count = sum(len(doc.accessed_slice) + 1 for doc in self.cache.values())
+        num_deletion = current_slice_count - self.size_limit
         if num_deletion:
             sort_by_access = sorted(self.cache.items(), key=get_value)
-            for k, _ in sort_by_access[:num_deletion]:
-                del self.cache[k]
+            for k, v in sort_by_access:
+                num_deletion -= v.clear()
+                if num_deletion < 1:
+                    break
+            if num_deletion:
+                for k, v in sort_by_access:
+                    del self.cache[k]
+                    num_deletion -= 1
+                    if num_deletion < 1:
+                        break
             gc.collect()
