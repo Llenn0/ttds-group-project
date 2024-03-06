@@ -130,19 +130,19 @@ def boolean_search():
         endNum = startNum + numPerPage
 
         start = time.time()
-        docIds = boolean_search_cache.get(search_query, None)
+        docIds = boolean_search_cache.get((search_query, max_distance), None)
         if docIds is None:
             if len(boolean_search_cache) > boolean_search_cache_limit:
                 oldest_result = list(boolean_search_cache.keys())[0]
                 del boolean_search_cache[oldest_result]
             try:
-                boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
+                boolean_search_cache[(search_query, max_distance)] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg)
                 docIds = []
             else:
-                docIds = boolean_search_cache[search_query]
+                docIds = boolean_search_cache[(search_query, max_distance)]
         queryTime = time.time() - start
     except Exception as e:
         docIds = []
@@ -172,19 +172,19 @@ def phrase_search():
         endNum = startNum + numPerPage
 
         start = time.time()
-        docIds = boolean_search_cache.get(search_query, None)
+        docIds = boolean_search_cache.get((search_query, max_distance), None)
         if docIds is None:
             if len(boolean_search_cache) > boolean_search_cache_limit:
                 oldest_result = list(boolean_search_cache.keys())[0]
                 del boolean_search_cache[oldest_result]
             try:
-                boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance, force_phrase=True))
+                boolean_search_cache[(search_query, max_distance)] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance, force_phrase=True))
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg)
                 docIds = []
             else:
-                docIds = boolean_search_cache[search_query]
+                docIds = boolean_search_cache[(search_query, max_distance)]
         queryTime = time.time() - start
     except Exception as e:
         docIds = []
