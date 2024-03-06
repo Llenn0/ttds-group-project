@@ -245,6 +245,7 @@ class CloudIndex:
     def preallocate(self, docIds: list[int]):
         self.cache.pre_alloc = docIds
     def gc(self):
+        self.cache.pre_alloc = []
         current_slice_count = sum(len(doc.accessed_slice) + 1 for doc in self.cache.values())
         num_deletion = current_slice_count - self.size_limit
         if num_deletion > 0:
