@@ -108,6 +108,11 @@ def return_set():
     return set()
 
 def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defaultdict, defaultdict, defaultdict]:
+    global category_dict
+
+    with open(path.replace("metadata.csv", "bookshelves_ebooks_dict.pkl"), "rb") as f:
+        category_dict = {k : sorted([int(i[2:]) for i in v]) for k, v in pickle.load(f).items() if k.isalnum()}
+
     if is_deployment:
         path = deployment_path + path
     extract_item = re.compile(r"\'(\w+)\'")
