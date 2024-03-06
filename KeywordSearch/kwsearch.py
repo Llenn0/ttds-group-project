@@ -50,11 +50,6 @@ def update_index(processed_books, all_tokens):
 
 def bool_search(query: str, index: Dict[int, Dict], lans: list[str], subs: list[str], dist: int=3, debug: bool=False) -> set[int]:
     query = unidecode(query)
-    # all_elem = set()
-    # for lan in lans:
-    #     all_elem.update(lan_dict[lan])
-    # for sub in subs:
-    #     all_elem.update(sub_dict[sub])
     filtered_results = filter_by_lan_sub(lans, subs)
     current_stopwords = set()
     for lan in lans:
@@ -218,7 +213,7 @@ def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, fi
                 if not matches.any():
                     break
             else:
-                search_result.append(docID)
+                search_result.append(int(docID))
     return set(search_result)
 
 def filter_by_lan_sub(languages: list[str]|str, subjects: list[str]) -> set[int]:
