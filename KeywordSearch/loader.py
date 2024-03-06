@@ -10,11 +10,12 @@ import concurrent.futures
 from sys import platform
 from collections import defaultdict
 
-from unidecode import unidecode, unidecode_expect_nonascii
-from nltk.corpus import stopwords
-from Stemmer import Stemmer
-from tqdm import tqdm
 import nltk
+import scipy.sparse
+from tqdm import tqdm
+from Stemmer import Stemmer
+from nltk.corpus import stopwords
+from unidecode import unidecode, unidecode_expect_nonascii
 
 from Preprocessing import preprocess_ebooks, stopwords_available
 
@@ -42,7 +43,8 @@ nltk.download('stopwords')
 def init_module():
     global processed_books, raw_dir, token_dir, index_dir
     global stopwords_set, stemmer, processed_books, all_tokens, tokens_fetched, language_code
-    global metadata, all_subjects, all_languages, stopwords_dict, lan_dict, sub_dict
+    global metadata, all_subjects, all_languages, stopwords_dict, lan_dict, sub_dict, all_lan_single
+    global subject_index, title_index, author_index, subject_ids, title_ids, author_ids
 
     try:
         with open(VALID_BOOKS_PATH, 'rb') as f:
@@ -95,17 +97,26 @@ def init_module():
     stopwords_set = stopwords_dict["english"]
     stopwords_dict["chinese"] = frozenset(unidecode_expect_nonascii("\n".join(stopwords.words("chinese"))).lower().splitlines())
 
-def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defaultdict, defaultdict, set]:
+    subject_index = scipy.sparse.load_npz(LOOKUP_TABLE_PATH.replace("lookup_table", "subject_index"))
+    author_index = scipy.sparse.load_npz(LOOKUP_TABLE_PATH.replace("lookup_table", "author_index"))
+    title_index = scipy.sparse.load_npz(LOOKUP_TABLE_PATH.replace("lookup_table", "title_index"))
+    with open(LOOKUP_TABLE_PATH.replace("lookup_table.npz", "metadata_index_lookup.pkl"), "rb") as f:
+        subject_ids, title_ids, author_ids = pickle.load(f)
+
+def return_set():
+    """Helper function for default dicts, lambda functions aren't pickle-able but named functions are"""
+    return set()
+
+def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defaultdict, defaultdict, defaultdict]:
     if is_deployment:
         path = deployment_path + path
     extract_item = re.compile(r"\'(\w+)\'")
-    lan_dict = defaultdict(lambda : set())
-    sub_dict = defaultdict(lambda : set())
+    lan_dict = defaultdict(return_set)
+    sub_dict = defaultdict(return_set)
     title_author_dict = dict()
-    author_dict = dict()
     sub_inverted_dict = dict()
     all_lan = set()
-    all_lan_single = set()
+    all_lan_single = defaultdict(return_set)
     all_sub = set()
     meta = dict()
     with open(path, 'r', encoding="utf-8", errors="ignore") as f:
@@ -125,7 +136,8 @@ def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defa
         lan_dict[languages].add(book_id)
         title_author_dict[book_id] = (title, author)
         all_lan.add(languages)
-        all_lan_single.update(languages)
+        for lan in languages:
+            all_lan_single[lan].add(book_id)
         all_sub.update(subjects)
     
     # Memory-saving measure: use the same string object for same subject across all books
