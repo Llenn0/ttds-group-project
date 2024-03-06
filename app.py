@@ -122,6 +122,7 @@ def boolean_search():
     subjects = data["subjects"]
     page = data["page"]
     numPerPage = data["numPerPage"]
+    max_distance = data["dist"] if "dist" in data else 3
     startNum = (page-1) * numPerPage
     endNum = startNum + numPerPage
 
@@ -133,7 +134,7 @@ def boolean_search():
             oldest_result = list(boolean_search_cache.keys())[0]
             del boolean_search_cache[oldest_result]
         try:
-            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
+            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
         except Exception as e:
             err_msg = '\n'.join(traceback.format_exception(e))
             print(err_msg)
@@ -160,6 +161,7 @@ def phrase_search():
     subjects = data["subjects"]
     page = data["page"]
     numPerPage = data["numPerPage"]
+    max_distance = data["dist"] if "dist" in data else 3
     startNum = (page-1) * numPerPage
     endNum = startNum + numPerPage
 
@@ -171,7 +173,7 @@ def phrase_search():
             oldest_result = list(boolean_search_cache.keys())[0]
             del boolean_search_cache[oldest_result]
         try:
-            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects))
+            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
         except Exception as e:
             err_msg = '\n'.join(traceback.format_exception(e))
             print(err_msg)
