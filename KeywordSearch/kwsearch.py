@@ -186,8 +186,13 @@ def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, de
     raw_word_ids = (token_index_dict[stemmer.stemWord(word)] for word in words)
     raw_word_ids = tuple(word_id for word_id in raw_word_ids if word_id)
     word_ids = set(raw_word_ids)
-    if len(word_ids) == 0:
-        return set()
+    
+    num_words = len(raw_word_ids)
+    if num_words == 0:
+        return all_elems_set
+    elif num_words == 1:
+        return set(lookup_table[raw_word_ids[0], :].indices.tolist())
+    
     all_ids = list(word_ids)
     intersection = lookup_table[all_ids.pop(), :].indices
     for token_id in all_ids:
