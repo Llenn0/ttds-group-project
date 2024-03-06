@@ -131,6 +131,8 @@ class CloudDoc:
             self.positions_cache = dict()
             self.known_keys = {first_book_id : i for i, first_book_id in enumerate(cloud_dict['h'])}
             self.data = None
+            if len(pre_alloc):
+                self.cache_slices({self.known_keys[i] if i in self.known_keys else (self.header.searchsorted(i) - 1) for i in pre_alloc})
         else:
             self.positions_cache = {k : np.array(json.loads(v), dtype=np.uint32) for k, v in zip(cloud_dict['h'], cloud_dict['d'])}
             self.known_keys = set(cloud_dict['h'])
@@ -138,8 +140,6 @@ class CloudDoc:
         
         self.access = 0
 
-        if len(pre_alloc):
-            self.cache_slices({self.known_keys[i] if i in self.known_keys else (self.header.searchsorted(i) - 1) for i in pre_alloc})
 
     def __contains__(self, i: int) -> bool:
         if i in self.known_keys:
