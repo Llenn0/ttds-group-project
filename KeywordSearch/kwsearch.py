@@ -55,6 +55,8 @@ def bool_search(query: str, index: Dict[int, Dict], lans: list[str], subs: list[
     for lan in lans:
         if lan in stopwords_dict:
             current_stopwords.update(stopwords_dict[lan])
+    if len(current_stopwords) < 1:
+        current_stopwords.update(stopwords_dict["english"])
     phrase_params = (current_stopwords, index, dist)
     if regex_bool_op.search(query) is None:
         return phrase_search_wrapper(query, filtered_results, phrase_params, debug)
