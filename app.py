@@ -73,10 +73,10 @@ boolean_search_cache = dict()
 boolean_search_cache_limit = 20
 
 def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int) -> dict:
-    return [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
-                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
-                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
-                           for docId in docIds[startNum:min(endNum, totalNum)]]
+    return [{"id": docId, "title": loader.metadata[docId][2], 
+            "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
+            "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
+            for docId in docIds[startNum:min(endNum, totalNum)]]
 
 @app.route('/')
 def hello_world():
@@ -108,7 +108,7 @@ def semantic_search():
     docIds, scores = list(results[0]), list(results[1])
     totalNum = len(docIds)
 
-    res_json = {"books": [{"id": docId, "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
+    res_json = {"books": [{"id": int(docId[2:]), "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
 
