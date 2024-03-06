@@ -65,12 +65,18 @@ searcher = SemanticSearch()
 import KeywordSearch.loader as loader
 
 loader.init_module()
-from KeywordSearch.kwsearch import bool_search
+from KeywordSearch.kwsearch import bool_search, adv_search
 from KeywordSearch.cloud_index import CloudIndex
 
 inverted_index = CloudIndex(coll, size_limit=10000)
 boolean_search_cache = dict()
 boolean_search_cache_limit = 20
+
+def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int) -> dict:
+    return [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
+                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
+                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
+                           for docId in docIds[startNum:min(endNum, totalNum)]]
 
 @app.route('/')
 def hello_world():
@@ -138,10 +144,10 @@ def boolean_search():
 
     inverted_index.gc()
     totalNum = len(docIds)
-    res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
-                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
-                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
-                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+    
+    res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+    
     return res_json
 
 @app.route('/phrase', methods=["POST"])
@@ -176,10 +182,38 @@ def phrase_search():
 
     inverted_index.gc()
     totalNum = len(docIds)
-    res_json = {"books": [{"id": "PG" + str(docId), "title": loader.metadata[docId][2], 
-                           "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
-                           "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
-                           for docId in docIds[startNum:min(endNum, totalNum)]], "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+    res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+    return res_json
+
+@app.route('/advanced', methods=["POST"])
+def advanced_search():
+    data = request.get_json()
+    author_query = data["author"]
+    title_query = data["title"]
+    languages = data["languages"]
+    subjects = data["subjects"]
+    page = data["page"]
+    numPerPage = data["numPerPage"]
+    startNum = (page-1) * numPerPage
+    endNum = startNum + numPerPage
+
+    start = time.time()
+    err_msg = "No error"
+    try:
+        docIds = sorted(adv_search(author_query, title_query, languages, subjects))
+    except Exception as e:
+        err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg)
+        docIds = []
+    queryTime = time.time() - start
+
+    inverted_index.gc()
+    totalNum = len(docIds)
+    
+    res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+    
     return res_json
 
 
