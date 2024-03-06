@@ -183,7 +183,7 @@ def phrase_search():
         query_info = search_query + str(sorted(languages)) + str(sorted(subjects)) + str(max_distance)
         docIds = phrase_search_cache.get(query_info, None)
         if docIds is None:
-            if len(phrase_search_cache) > phrase_search_cache:
+            if len(phrase_search_cache) > paging_cache_limit:
                 oldest_result = list(phrase_search_cache.keys())[0]
                 del phrase_search_cache[oldest_result]
             try:
