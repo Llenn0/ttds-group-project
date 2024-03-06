@@ -200,17 +200,12 @@ def advanced_search():
 
     start = time.time()
     err_msg = "No error"
-    if len(boolean_search_cache) > boolean_search_cache_limit:
-        oldest_result = list(boolean_search_cache.keys())[0]
-        del boolean_search_cache[oldest_result]
     try:
-        docIds = sorted()
+        docIds = sorted(adv_search(author_query, title_query, languages, subjects))
     except Exception as e:
         err_msg = '\n'.join(traceback.format_exception(e))
         print(err_msg)
         docIds = []
-    else:
-        docIds = sorted(adv_search(author_query, title_query, languages, subjects))
     queryTime = time.time() - start
 
     inverted_index.gc()
