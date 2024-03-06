@@ -69,7 +69,8 @@ from KeywordSearch.cloud_index import CloudIndex
 
 inverted_index = CloudIndex(coll, size_limit=5000)
 boolean_search_cache = dict()
-boolean_search_cache_limit = 20
+phrase_search_cache = dict()
+paging_cache_limit = 20
 
 def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int) -> dict:
     if docIds:
@@ -128,21 +129,25 @@ def boolean_search():
         max_distance = data["dist"] if "dist" in data else 3
         startNum = (page-1) * numPerPage
         endNum = startNum + numPerPage
-
+        
+        if "clear_cache" in data and data["clear_cache"]:
+            boolean_search_cache.clear()
+        
         start = time.time()
-        docIds = boolean_search_cache.get((search_query, max_distance), None)
+        query_info = search_query + str(sorted(languages)) + str(sorted(subjects)) + str(max_distance)
+        docIds = boolean_search_cache.get(query_info, None)
         if docIds is None:
-            if len(boolean_search_cache) > boolean_search_cache_limit:
+            if len(boolean_search_cache) > paging_cache_limit:
                 oldest_result = list(boolean_search_cache.keys())[0]
                 del boolean_search_cache[oldest_result]
             try:
-                boolean_search_cache[(search_query, max_distance)] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
+                boolean_search_cache[query_info] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg)
                 docIds = []
             else:
-                docIds = boolean_search_cache[(search_query, max_distance)]
+                docIds = boolean_search_cache[query_info]
         queryTime = time.time() - start
     except Exception as e:
         docIds = []
@@ -158,7 +163,7 @@ def boolean_search():
 
 @app.route('/phrase', methods=["POST"])
 def phrase_search():
-    global boolean_search_cache
+    global phrase_search_cache
     err_msg = "No error"
     try:
         data = request.get_json()
@@ -171,20 +176,24 @@ def phrase_search():
         startNum = (page-1) * numPerPage
         endNum = startNum + numPerPage
 
+        if "clear_cache" in data and data["clear_cache"]:
+            phrase_search_cache.clear()
+
         start = time.time()
-        docIds = boolean_search_cache.get((search_query, max_distance), None)
+        query_info = search_query + str(sorted(languages)) + str(sorted(subjects)) + str(max_distance)
+        docIds = phrase_search_cache.get(query_info, None)
         if docIds is None:
-            if len(boolean_search_cache) > boolean_search_cache_limit:
-                oldest_result = list(boolean_search_cache.keys())[0]
-                del boolean_search_cache[oldest_result]
+            if len(phrase_search_cache) > phrase_search_cache:
+                oldest_result = list(phrase_search_cache.keys())[0]
+                del phrase_search_cache[oldest_result]
             try:
-                boolean_search_cache[(search_query, max_distance)] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance, force_phrase=True))
+                phrase_search_cache[query_info] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance, force_phrase=True))
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg)
                 docIds = []
             else:
-                docIds = boolean_search_cache[(search_query, max_distance)]
+                docIds = phrase_search_cache[query_info]
         queryTime = time.time() - start
     except Exception as e:
         docIds = []
