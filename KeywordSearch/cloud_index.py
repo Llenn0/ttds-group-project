@@ -247,7 +247,7 @@ class CloudIndex:
     def gc(self):
         current_slice_count = sum(len(doc.accessed_slice) + 1 for doc in self.cache.values())
         num_deletion = current_slice_count - self.size_limit
-        if num_deletion:
+        if num_deletion > 0:
             sort_by_access = sorted(self.cache.items(), key=get_value)
             for k, v in sort_by_access:
                 num_deletion -= v.clear()
