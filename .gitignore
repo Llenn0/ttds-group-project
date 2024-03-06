@@ -127,5 +127,4 @@ done_jobs*
 
 # metadata stuffs
 metadata/bookshelves_html
-metadata/*.pkl
 metadata/*.bz2

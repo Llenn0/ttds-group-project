@@ -48,15 +48,17 @@ def update_index(processed_books, all_tokens):
     all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
     gc.collect()
 
-def bool_search(query: str, index: Dict[int, Dict], lans: list[str], subs: list[str], dist: int=3, debug: bool=False) -> set[int]:
+def bool_search(query: str, index: Dict[int, Dict], lans: list[str], subs: list[str], dist: int=3, force_phrase: bool=False, debug: bool=False) -> set[int]:
     query = unidecode(query)
     filtered_results = filter_by_lan_sub(lans, subs)
     current_stopwords = set()
     for lan in lans:
         if lan in stopwords_dict:
             current_stopwords.update(stopwords_dict[lan])
+    if len(current_stopwords) < 1:
+        current_stopwords.update(stopwords_dict["english"])
     phrase_params = (current_stopwords, index, dist)
-    if regex_bool_op.search(query) is None:
+    if force_phrase or (regex_bool_op.search(query) is None):
         return phrase_search_wrapper(query, filtered_results, phrase_params, debug)
     else:
         filter_arr = np.array(list(filtered_results), dtype=np.uint32)

@@ -64,7 +64,6 @@ else:
 searcher = SemanticSearch()
 import KeywordSearch.loader as loader
 
-loader.init_module()
 from KeywordSearch.kwsearch import bool_search, adv_search
 from KeywordSearch.cloud_index import CloudIndex
 
@@ -73,10 +72,13 @@ boolean_search_cache = dict()
 boolean_search_cache_limit = 20
 
 def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int) -> dict:
-    return [{"id": docId, "title": loader.metadata[docId][2], 
-            "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
-            "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
-            for docId in docIds[startNum:min(endNum, totalNum)]]
+    if docIds:
+        return [{"id": docId, "title": loader.metadata[docId][2], 
+                "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
+                "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
+                for docId in docIds[startNum:min(endNum, totalNum)]]
+    else:
+        return []
 
 @app.route('/')
 def hello_world():
@@ -115,37 +117,40 @@ def semantic_search():
 @app.route('/boolean', methods=["POST"])
 def boolean_search():
     global boolean_search_cache
-
-    data = request.get_json()
-    search_query = data["query"]
-    languages = data["languages"]
-    subjects = data["subjects"]
-    page = data["page"]
-    numPerPage = data["numPerPage"]
-    max_distance = data["dist"] if "dist" in data else 3
-    startNum = (page-1) * numPerPage
-    endNum = startNum + numPerPage
-
-    start = time.time()
-    docIds = boolean_search_cache.get(search_query, None)
     err_msg = "No error"
-    if docIds is None:
-        if len(boolean_search_cache) > boolean_search_cache_limit:
-            oldest_result = list(boolean_search_cache.keys())[0]
-            del boolean_search_cache[oldest_result]
-        try:
-            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
-        except Exception as e:
-            err_msg = '\n'.join(traceback.format_exception(e))
-            print(err_msg)
-            docIds = []
-        else:
-            docIds = boolean_search_cache[search_query]
-    queryTime = time.time() - start
+    try:
+        data = request.get_json()
+        search_query = data["query"]
+        languages = data["languages"]
+        subjects = data["subjects"]
+        page = data["page"]
+        numPerPage = data["numPerPage"]
+        max_distance = data["dist"] if "dist" in data else 3
+        startNum = (page-1) * numPerPage
+        endNum = startNum + numPerPage
+
+        start = time.time()
+        docIds = boolean_search_cache.get(search_query, None)
+        if docIds is None:
+            if len(boolean_search_cache) > boolean_search_cache_limit:
+                oldest_result = list(boolean_search_cache.keys())[0]
+                del boolean_search_cache[oldest_result]
+            try:
+                boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
+            except Exception as e:
+                err_msg = '\n'.join(traceback.format_exception(e))
+                print(err_msg)
+                docIds = []
+            else:
+                docIds = boolean_search_cache[search_query]
+        queryTime = time.time() - start
+    except Exception as e:
+        docIds = []
+        startNum = endNum = totalNum = queryTime = -1
+        err_msg = '\n'.join(traceback.format_exception(e))
 
     inverted_index.gc()
     totalNum = len(docIds)
-    
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
                 "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
     
@@ -154,33 +159,37 @@ def boolean_search():
 @app.route('/phrase', methods=["POST"])
 def phrase_search():
     global boolean_search_cache
-
-    data = request.get_json()
-    search_query = data["query"]
-    languages = data["languages"]
-    subjects = data["subjects"]
-    page = data["page"]
-    numPerPage = data["numPerPage"]
-    max_distance = data["dist"] if "dist" in data else 3
-    startNum = (page-1) * numPerPage
-    endNum = startNum + numPerPage
-
-    start = time.time()
-    docIds = boolean_search_cache.get(search_query, None)
     err_msg = "No error"
-    if docIds is None:
-        if len(boolean_search_cache) > boolean_search_cache_limit:
-            oldest_result = list(boolean_search_cache.keys())[0]
-            del boolean_search_cache[oldest_result]
-        try:
-            boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
-        except Exception as e:
-            err_msg = '\n'.join(traceback.format_exception(e))
-            print(err_msg)
-            docIds = []
-        else:
-            docIds = boolean_search_cache[search_query]
-    queryTime = time.time() - start
+    try:
+        data = request.get_json()
+        search_query = data["query"]
+        languages = data["languages"]
+        subjects = data["subjects"]
+        page = data["page"]
+        numPerPage = data["numPerPage"]
+        max_distance = data["dist"] if "dist" in data else 3
+        startNum = (page-1) * numPerPage
+        endNum = startNum + numPerPage
+
+        start = time.time()
+        docIds = boolean_search_cache.get(search_query, None)
+        if docIds is None:
+            if len(boolean_search_cache) > boolean_search_cache_limit:
+                oldest_result = list(boolean_search_cache.keys())[0]
+                del boolean_search_cache[oldest_result]
+            try:
+                boolean_search_cache[search_query] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance, force_phrase=True))
+            except Exception as e:
+                err_msg = '\n'.join(traceback.format_exception(e))
+                print(err_msg)
+                docIds = []
+            else:
+                docIds = boolean_search_cache[search_query]
+        queryTime = time.time() - start
+    except Exception as e:
+        docIds = []
+        startNum = endNum = totalNum = queryTime = -1
+        err_msg = '\n'.join(traceback.format_exception(e))
 
     inverted_index.gc()
     totalNum = len(docIds)
@@ -190,29 +199,62 @@ def phrase_search():
 
 @app.route('/advanced', methods=["POST"])
 def advanced_search():
-    data = request.get_json()
-    author_query = data["author"]
-    title_query = data["title"]
-    languages = data["languages"]
-    subjects = data["subjects"]
-    page = data["page"]
-    numPerPage = data["numPerPage"]
-    startNum = (page-1) * numPerPage
-    endNum = startNum + numPerPage
-
-    start = time.time()
     err_msg = "No error"
     try:
-        docIds = sorted(adv_search(author_query, title_query, languages, subjects))
-    except Exception as e:
-        err_msg = '\n'.join(traceback.format_exception(e))
-        print(err_msg)
-        docIds = []
-    queryTime = time.time() - start
+        data = request.get_json()
+        author_query = data["author"]
+        title_query = data["title"]
+        languages = data["languages"]
+        subjects = data["subjects"]
+        page = data["page"]
+        numPerPage = data["numPerPage"]
+        startNum = (page-1) * numPerPage
+        endNum = startNum + numPerPage
 
-    inverted_index.gc()
-    totalNum = len(docIds)
+        start = time.time()
+        try:
+            docIds = sorted(adv_search(author_query, title_query, languages, subjects))
+        except Exception as e:
+            err_msg = '\n'.join(traceback.format_exception(e))
+            print(err_msg)
+            docIds = []
+        queryTime = time.time() - start
+        totalNum = len(docIds)
+    except Exception as e:
+        docIds = []
+        startNum = endNum = totalNum = queryTime = -1
+        err_msg = '\n'.join(traceback.format_exception(e))
     
+    res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+    
+    return res_json
+
+@app.route('/category', methods=["POST"])
+def display_category():
+    err_msg = "No error"
+    try:
+        data = request.get_json()
+        bookshelf_id = data["bookshelf"]
+        page = data["page"]
+        numPerPage = data["numPerPage"]
+        startNum = (page-1) * numPerPage
+        endNum = startNum + numPerPage
+
+        start = time.time()
+        try:
+            docIds = loader.category_dict.get(str(bookshelf_id), [])
+        except Exception as e:
+            err_msg = '\n'.join(traceback.format_exception(e))
+            print(err_msg)
+            docIds = []
+        queryTime = time.time() - start
+        totalNum = len(docIds)
+    except Exception as e:
+        docIds = []
+        startNum = endNum = totalNum = queryTime = -1
+        err_msg = '\n'.join(traceback.format_exception(e))
+
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
                 "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
     
