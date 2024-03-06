@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Dict
 
 import re
 import gc
@@ -48,7 +48,7 @@ def update_index(processed_books, all_tokens):
     all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
     gc.collect()
 
-def bool_search(query: str, index: Iterable[dict], lans, subs, debug: bool=False) -> set[int]:
+def bool_search(query: str, index: Dict[int, Dict], lans: list[str], subs: list[str], dist: int=3, debug: bool=False) -> set[int]:
     query = unidecode(query)
     # all_elem = set()
     # for lan in lans:
@@ -60,18 +60,25 @@ def bool_search(query: str, index: Iterable[dict], lans, subs, debug: bool=False
     for lan in lans:
         if lan in stopwords_dict:
             current_stopwords.update(stopwords_dict[lan])
+    phrase_params = (current_stopwords, index, dist)
     if regex_bool_op.search(query) is None:
-        query_tokens = [word for word in regex_tokenise.findall(query.lower()) if word not in current_stopwords]
-        return phrase_search_cloud(query_tokens, index, 3, filter=filtered_results, debug=debug)
+        return phrase_search_wrapper(query, filtered_results, phrase_params, debug)
     else:
         filter_arr = np.array(list(filtered_results), dtype=np.uint32)
-        return _bool_search(query, filter=filtered_results, filter_arr=filter_arr, debug=debug)[0] & filtered_results
+        return _bool_search(query, phrase_params, filter_=filtered_results, filter_arr=filter_arr, debug=debug)[0] & filtered_results
 
-def _bool_search(query: str, filter: set[int]=all_elems_set, filter_arr: np.ndarray[int]=all_elems_arr, 
-                 debug: bool=False) -> set[int]:
+def phrase_search_wrapper(query: str, filter_: set[int], phrase_params: tuple, debug: bool=False):
+    current_stopwords = phrase_params[0]
+    index = phrase_params[1]
+    max_dist = phrase_params[2]
+    query_tokens = [word for word in regex_tokenise.findall(query.lower()) if word not in current_stopwords]
+    return phrase_search_cloud(query_tokens, index, max_dist, filter_=filter_, debug=debug)
+
+def _bool_search(query: str, phrase_params: tuple, filter_: set[int]=all_elems_set, 
+                 filter_arr: np.ndarray[int]=all_elems_arr, debug: bool=False) -> set[int]:
     if debug:
         print(regex_bracket.split(query))
-    tokens = (bool_search_atomic(token, filter, filter_arr, debug) for token in regex_bracket.split(query) if token)
+    tokens = (bool_search_atomic(token, phrase_params, filter_, filter_arr, debug) for token in regex_bracket.split(query) if token)
     is_not = is_and = is_or = False
     valid, (is_not, is_and, is_or) = next(tokens)
     for token_eval, (is_not_, is_and_, is_or_) in tokens:
@@ -80,7 +87,7 @@ def _bool_search(query: str, filter: set[int]=all_elems_set, filter_arr: np.ndar
             continue
         if is_or:
             if is_not:
-                valid |= (filter - token_eval)
+                valid |= (filter_ - token_eval)
             else:
                 valid |= token_eval
             is_or = is_not = False
@@ -91,16 +98,16 @@ def _bool_search(query: str, filter: set[int]=all_elems_set, filter_arr: np.ndar
                 valid &= token_eval
             is_and = is_not = False
         elif is_not:
-            valid = filter - token_eval
+            valid = filter_ - token_eval
         else:
             print(f"Grammar error?")
         
         is_not = is_not_; is_and = is_and_; is_or = is_or_
     return valid, (is_not, is_and, is_or)
 
-def bool_search_atomic(query: str, filter_: set[int]=all_elems_set, filter_arr: np.ndarray[int]=all_elems_arr, debug: bool=False) -> set[int]:
+def bool_search_atomic(query: str, phrase_params: tuple, filter_: set[int]=all_elems_set, filter_arr: np.ndarray[int]=all_elems_arr, debug: bool=False) -> set[int]:
     if '(' in query:
-        return _bool_search(query, filter_, filter_arr, debug)
+        return _bool_search(query, phrase_params, filter_, filter_arr, debug)
     query = query.strip()
     if not query:
         return set(), (False, False, False)
@@ -120,9 +127,16 @@ def bool_search_atomic(query: str, filter_: set[int]=all_elems_set, filter_arr: 
                 is_and = True
                 if is_not: not_first = True
         else:
-            token_id = token_index_dict[stemmer.stemWord(token.strip().casefold())]
-            if token_id:
-                token_eval = lookup_table[token_id, :].indices
+            is_valid_token = False
+            if token[0] == token[-1] == '"':
+                token_eval = list(phrase_search_wrapper(token[1:-1], filter_, phrase_params, debug))
+                is_valid_token = True
+            else:
+                token_id = token_index_dict[stemmer.stemWord(token.casefold())]
+                is_valid_token = token_id > 0 # token 0 is reserved
+                if is_valid_token:
+                    token_eval = lookup_table[token_id, :].indices
+            if is_valid_token:
                 if is_or:
                     if is_not:
                         if not_first:
@@ -153,7 +167,7 @@ def bool_search_atomic(query: str, filter_: set[int]=all_elems_set, filter_arr: 
         valid = set(valid.tolist())
     return valid, (is_not, is_and, is_or)
 
-def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, filter: set=all_elems_set, debug: bool=False) -> set[int]:
+def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, filter_: set=all_elems_set, debug: bool=False) -> set[int]:
     search_result = []
     if debug:
         print(stemmer.stemWords(words))
@@ -171,7 +185,7 @@ def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, fi
     intersection = lookup_table[all_ids.pop(), :].indices
     for token_id in all_ids:
         intersection = np.intersect1d(intersection, lookup_table[token_id, :].indices, assume_unique=True)
-    intersection = np.intersect1d(intersection, list(filter), assume_unique=True)
+    intersection = np.intersect1d(intersection, list(filter_), assume_unique=True)
     index.preallocate(intersection)
 
     num_words = len(raw_word_ids)
