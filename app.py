@@ -67,7 +67,7 @@ import KeywordSearch.loader as loader
 from KeywordSearch.kwsearch import bool_search, adv_search
 from KeywordSearch.cloud_index import CloudIndex
 
-inverted_index = CloudIndex(coll, size_limit=5000)
+inverted_index = CloudIndex(coll, size_limit=500)
 boolean_search_cache = dict()
 phrase_search_cache = dict()
 paging_cache_limit = 20
@@ -114,18 +114,27 @@ def semantic_search():
     res_json = {"books": [{"id": int(docId[2:]), "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
-@app.route('/clearcache', methods=["POST"])
+@app.route('/setcache', methods=["POST"])
 def clearcloudindex():
     err_msg = "No error"
     cloud_index_size = len(inverted_index.cache)
+    force_crash = False
     try:
         data = request.get_json()
+        if "force_crash" in data and data["force_crash"]:
+            force_crash = True
+        assert not force_crash, f"/setcache POST request asked for crashing the server: {data}"
         if "clear_cache" in data and data["clear_cache"]:
             inverted_index.clear()
+        if "set_cache" in data:
+            inverted_index.size_limit = data["set_cache"]
     except Exception as e:
         err_msg = '\n'.join(traceback.format_exception(e))
         print(err_msg)
     
+    if force_crash:
+        raise Exception(f"/setcache POST request asked for crashing the server")
+
     res_json = {"err_msg" : err_msg, "index_size" : cloud_index_size}
     return res_json
 
