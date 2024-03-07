@@ -114,6 +114,20 @@ def semantic_search():
     res_json = {"books": [{"id": int(docId[2:]), "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
+@app.route('/clearcloudindex', methods=["POST"])
+def semantic_search():
+    err_msg = "No error"
+    cloud_index_size = len(inverted_index.cache)
+    try:
+        data = request.get_json()
+        if "clear_cache" in data and data["clear_cache"]:
+            inverted_index.clear()
+    except Exception as e:
+        err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg)
+    
+    res_json = {"err_msg" : err_msg, "index_size" : cloud_index_size}
+    return res_json
 
 @app.route('/boolean', methods=["POST"])
 def boolean_search():
@@ -154,10 +168,10 @@ def boolean_search():
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
 
-    inverted_index.gc()
     totalNum = len(docIds)
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
-                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg, 
+                "cache_size" : inverted_index.gc()}
     
     return res_json
 
@@ -200,10 +214,10 @@ def phrase_search():
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
 
-    inverted_index.gc()
     totalNum = len(docIds)
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
-                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg, 
+                "cache_size" : inverted_index.gc()}
     return res_json
 
 @app.route('/advanced', methods=["POST"])
