@@ -236,7 +236,7 @@ class CloudIndexDict(dict):
         else:
             str_keys = [str(k) for k in key if k not in self]
             keys_in_self = (k for k in key if k in self)
-            if self.pre_alloc:
+            if len(self.pre_alloc):
                 for k in keys_in_self:
                     doc: CloudDoc = self[k]
                     if doc.is_segmented:
