@@ -109,9 +109,16 @@ def prepare_tokendict_for_upload(token_dict: dict[str, np.ndarray[int]], token_i
                 else:
                     with open(LOG_PATH, 'a', encoding="UTF-8") as f:
                         f.write(f"ERROR: Entry at token {token_id}, book {k} can't fit after compression\n")
+    
+    # Remove the last slice if it's empty
     if is_small_upload:
         slice.rm_slice_id()
+        to_upload.append(slice)
     else:
+        if len(slice.header) < 0:
+            all_slices.pop()
+        else:
+            to_upload.append(slice)
         to_upload.append(DocIndex(token_id, all_slices))
     to_upload.append(slice)
     return to_upload
@@ -240,11 +247,17 @@ class CloudIndex:
         self.index_api = collection_
         self.size_limit = size_limit
         self.cache = CloudIndexDict(self.index_api)
+
     def __getitem__(self, i: int|str):
         return self.cache[i]
+    
     def preallocate(self, docIds: list[int]):
         self.cache.pre_alloc = docIds
-    def gc(self):
+    
+    def clear(self):
+        self.cache.clear()
+
+    def gc(self) -> int:
         self.cache.pre_alloc = []
         current_slice_count = sum(len(doc.accessed_slice) + 1 for doc in self.cache.values())
         num_deletion = current_slice_count - self.size_limit
@@ -254,10 +267,8 @@ class CloudIndex:
                 num_deletion -= v.clear()
                 if num_deletion < 1:
                     break
-            if num_deletion:
-                for k, v in sort_by_access:
+            if num_deletion > 1:
+                for k, v in sort_by_access[:num_deletion]:
                     del self.cache[k]
-                    num_deletion -= 1
-                    if num_deletion < 1:
-                        break
             gc.collect()
+        return current_slice_count
