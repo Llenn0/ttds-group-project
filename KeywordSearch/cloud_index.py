@@ -219,7 +219,7 @@ class CloudDoc:
         return arr
 
 def get_value(kv: tuple[int, CloudDoc]):
-    return kv[1].access / len(kv[1].positions_cache)
+    return (kv[1].access + 1) / (len(kv[1].positions_cache) + 1)
 
 class CloudIndexDict(dict):
     def __init__(self, index_api: firestore.CollectionReference):
