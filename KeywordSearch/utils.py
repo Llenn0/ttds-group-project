@@ -54,7 +54,7 @@ def construct_bool_table(index: Iterable[dict], all_tokens: tuple[str], valid_bo
     if valid_books is None:
         with open(VALID_BOOKS_PATH, "rb") as f:
             valid_books = tuple(pickle.load(f))
-    table = scipy.sparse.dok_array((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
+    table = scipy.sparse.dok_matrix((len(all_tokens), max(valid_books) + 1), dtype=np.bool_)
     del valid_books
     length = len(all_tokens)
     for token_id, token_dict in tqdm(enumerate(index[:length]), desc="Constructing lookup table", total=length):
@@ -259,12 +259,12 @@ class ZeroDict(dict):
     def __missing__(self, _):
         return 0
 
-def dict2arr(data: dict[int, int|float], dtype: np.dtype, length: int|None=None) -> np.ndarray:
+def dict2arr(data: dict[int, int|float], length: int|None=None, **kwargs) -> np.ndarray:
     keys = list(data.keys())
     key_max = max(keys)
-    assert length > key_max, "Length must be greater than the largest key in data dict"
     if length is None:
         length = key_max + 1
-    arr = np.zeros(length, dtype=dtype)
+    assert length > key_max, "Length must be greater than the largest key in data dict"
+    arr = np.zeros(length, **kwargs)
     arr[keys] = list(data.values())
     return arr
