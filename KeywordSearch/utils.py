@@ -259,8 +259,12 @@ class ZeroDict(dict):
     def __missing__(self, _):
         return 0
 
-def dict2arr(data: dict[int, int|float], dtype: np.dtype) -> np.ndarray:
+def dict2arr(data: dict[int, int|float], dtype: np.dtype, length: int|None=None) -> np.ndarray:
     keys = list(data.keys())
-    arr = np.zeros(max(keys) + 1, dtype=np.float32)
+    key_max = max(keys)
+    assert length > key_max, "Length must be greater than the largest key in data dict"
+    if length is None:
+        length = key_max + 1
+    arr = np.zeros(length, dtype=dtype)
     arr[keys] = list(data.values())
     return arr
