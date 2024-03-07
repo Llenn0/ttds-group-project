@@ -147,12 +147,12 @@ class CloudDoc:
         self.access = 0
 
     def clear(self) -> int:
-        slices_deleted = 0
+        slices_deleted = 1
         if self.is_segmented:
             slices_deleted = len(self.accessed_slice)
-            self.accessed_slice = set()
-            self.positions_cache = dict()
-            self.known_keys = {first_book_id : i for i, first_book_id in enumerate(self.header.tolist())}
+            # self.accessed_slice = set()
+            # self.positions_cache = dict()
+            # self.known_keys = {first_book_id : i for i, first_book_id in enumerate(self.header.tolist())}
         return slices_deleted
 
     def __contains__(self, i: int) -> bool:
@@ -219,7 +219,7 @@ class CloudDoc:
         return arr
 
 def get_value(kv: tuple[int, CloudDoc]):
-    return kv[1].access / len(kv[1].positions_cache)
+    return (kv[1].access + 1) / (len(kv[1].positions_cache) + 1)
 
 class CloudIndexDict(dict):
     def __init__(self, index_api: firestore.CollectionReference):
@@ -264,10 +264,8 @@ class CloudIndex:
             sort_by_access = sorted(self.cache.items(), key=get_value)
             for k, v in sort_by_access:
                 num_deletion -= v.clear()
+                del self.cache[k]
                 if num_deletion < 1:
                     break
-            if num_deletion > 1:
-                for k, v in sort_by_access[:num_deletion]:
-                    del self.cache[k]
             gc.collect()
         return current_slice_count
