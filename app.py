@@ -114,7 +114,7 @@ def semantic_search():
     res_json = {"books": [{"id": int(docId[2:]), "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
     return res_json
 
-@app.route('/clearcloudindex', methods=["POST"])
+@app.route('/clearcache', methods=["POST"])
 def clearcloudindex():
     err_msg = "No error"
     cloud_index_size = len(inverted_index.cache)
