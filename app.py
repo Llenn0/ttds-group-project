@@ -67,7 +67,7 @@ import KeywordSearch.loader as loader
 from KeywordSearch.kwsearch import bool_search, adv_search
 from KeywordSearch.cloud_index import CloudIndex
 
-inverted_index = CloudIndex(coll, size_limit=500)
+inverted_index = CloudIndex(coll, size_limit=1000)
 boolean_search_cache = dict()
 phrase_search_cache = dict()
 paging_cache_limit = 20
