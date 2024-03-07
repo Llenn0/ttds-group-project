@@ -115,12 +115,11 @@ def prepare_tokendict_for_upload(token_dict: dict[str, np.ndarray[int]], token_i
         slice.rm_slice_id()
         to_upload.append(slice)
     else:
-        if len(slice.header) < 0:
+        if len(slice.header) < 1:
             all_slices.pop()
         else:
             to_upload.append(slice)
         to_upload.append(DocIndex(token_id, all_slices))
-    to_upload.append(slice)
     return to_upload
 
 class CloudDoc:

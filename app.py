@@ -115,7 +115,7 @@ def semantic_search():
     return res_json
 
 @app.route('/clearcloudindex', methods=["POST"])
-def semantic_search():
+def clearcloudindex():
     err_msg = "No error"
     cloud_index_size = len(inverted_index.cache)
     try:
