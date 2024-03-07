@@ -184,7 +184,7 @@ class CloudDoc:
                 start = i * 30
                 end = min(num_new_slices, start + 30)
                 names_to_fetch = (self.doc_name %(i) for i in slices_to_alloc[start:end])
-                for doc_ref in self.index_api.where("__name__", "in", value=names_to_fetch).limit(len(slices_to_alloc)).stream(timeout=10):
+                for doc_ref in self.index_api.where("__name__", "in", value=names_to_fetch).limit(len(slices_to_alloc)).stream(timeout=90):
                     fetched_slice = doc_ref.to_dict()
                     self.accessed_slice.add(int(doc_ref.id.split('_')[1]))
                     if 'd' in fetched_slice:
@@ -235,11 +235,18 @@ class CloudIndexDict(dict):
             return self[key]
         else:
             str_keys = [str(k) for k in key if k not in self]
+            keys_in_self = (k for k in key if k in self)
+            if self.pre_alloc:
+                for k in keys_in_self:
+                    doc: CloudDoc = self[k]
+                    if doc.is_segmented:
+                        doc.cache_slices({doc.known_keys[i] if i in doc.known_keys else (doc.header.searchsorted(i) - 1) 
+                                          for i in self.pre_alloc})
             if str_keys:
                 for doc_ref in self.index_api.where("__name__", "in", value=str_keys).limit(len(key)).stream(timeout=10):
                     k = int(doc_ref.id)
                     self[k] = CloudDoc(self.index_api, k, pre_alloc=self.pre_alloc, cloud_dict=doc_ref.to_dict())
-            return [self[k] for k in key]
+            return [self[k] for k in key if k in self]
 
 class CloudIndex:
     def __init__(self, collection_: firestore.CollectionReference, size_limit: int=5000) -> None:

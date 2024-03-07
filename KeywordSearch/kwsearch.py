@@ -7,13 +7,13 @@ import numpy as np
 import scipy.sparse
 from unidecode import unidecode
 
-from KeywordSearch import utils
+from KeywordSearch import utils, loader
 from KeywordSearch.cloud_index import CloudIndex
-from KeywordSearch.loader import stemmer, processed_books, all_tokens, stopwords_dict, all_lan_single, sub_dict, LOOKUP_TABLE_PATH
+from KeywordSearch.loader import stemmer, processed_books, stopwords_dict, all_lan_single, sub_dict, LOOKUP_TABLE_PATH
 from KeywordSearch.loader import subject_index, title_index, author_index, subject_ids, title_ids, author_ids
 
 # Sparse look-up table aids boolean search
-lookup_table: scipy.sparse.csr_array | None
+lookup_table: scipy.sparse.csr_matrix | None
 try:
     lookup_table = scipy.sparse.load_npz(LOOKUP_TABLE_PATH)
 except:
@@ -30,19 +30,18 @@ regex_tokenise: re.Pattern              = re.compile(r"\b\w+\b")
 bool_ops = frozenset(("NOT", "AND", "OR"))
 
 # Other global variables that are expensive to generate
-token_index_dict: dict[str, int]        = utils.ZeroDict((token, i) for i, token in enumerate(all_tokens))
-all_tokens_set: set[str]                = set(all_tokens)
+token_index_dict: dict[str, int]        = utils.ZeroDict((token, i) for i, token in enumerate(loader.all_tokens))
 book_index: np.ndarray[int]             = utils.cast2intarr(np.array(sorted(processed_books)), delta_encode=False)[0]
 all_elems_set: set[int]                 = frozenset(processed_books)
-all_elems_arr: np.ndarray[np.int32]     = np.array(sorted(processed_books), dtype=np.int32)
+all_elems_arr: np.ndarray[np.uint32]    = np.array(sorted(processed_books), dtype=np.uint32)
 
 # Garbage collection
+del loader.all_tokens
 gc.collect()
 
 def update_index(processed_books, all_tokens):
-    global token_index_dict, all_tokens_set, book_index, all_elems_set, all_elems_arr
+    global token_index_dict, book_index, all_elems_set, all_elems_arr
     token_index_dict = utils.ZeroDict((token, i) for i, token in enumerate(all_tokens))
-    all_tokens_set = set(all_tokens)
     book_index = utils.cast2intarr(np.array(sorted(processed_books)), delta_encode=False)[0]
     all_elems_set = frozenset(range(lookup_table.shape[1]))
     all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
@@ -198,6 +197,11 @@ def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, fi
             index_entries += index[raw_word_ids[start:end]]
     else:
         index_entries = index[raw_word_ids]
+    
+    if len(index_entries) == 0:
+        return all_elems_set
+    elif len(index_entries) == 1:
+        return set(lookup_table[raw_word_ids[0], :].indices.tolist())
 
     for docID in intersection:
         occurs = (entry[docID] for entry in index_entries) # use generator to avoid wasting time on non-matches
@@ -242,7 +246,7 @@ def filter_by_lan_sub(languages: list[str]|str, subjects: list[str]) -> set[int]
         return lan_result
     return sub_result & lan_result
 
-def field_search(tokens: set[str], id_dict: dict[str, int], field_index: scipy.sparse.csr_array):
+def field_search(tokens: set[str], id_dict: dict[str, int], field_index: scipy.sparse.csr_matrix):
     author_results = set()
     for token in tokens:
         if token in id_dict:
