@@ -246,7 +246,7 @@ class CloudIndexDict(dict):
                 for doc_ref in self.index_api.where("__name__", "in", value=str_keys).limit(len(key)).stream(timeout=10):
                     k = int(doc_ref.id)
                     self[k] = CloudDoc(self.index_api, k, pre_alloc=self.pre_alloc, cloud_dict=doc_ref.to_dict())
-            return [self[k] for k in key]
+            return [self[k] for k in key if k in self]
 
 class CloudIndex:
     def __init__(self, collection_: firestore.CollectionReference, size_limit: int=5000) -> None:

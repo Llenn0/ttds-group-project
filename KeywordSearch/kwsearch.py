@@ -197,6 +197,11 @@ def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, fi
             index_entries += index[raw_word_ids[start:end]]
     else:
         index_entries = index[raw_word_ids]
+    
+    if len(index_entries) == 0:
+        return all_elems_set
+    elif len(index_entries) == 1:
+        return set(lookup_table[raw_word_ids[0], :].indices.tolist())
 
     for docID in intersection:
         occurs = (entry[docID] for entry in index_entries) # use generator to avoid wasting time on non-matches
