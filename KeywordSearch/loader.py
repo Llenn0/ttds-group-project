@@ -111,7 +111,7 @@ def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defa
     global category_dict
 
     with open("category_book_ids.pkl", "rb") as f:
-        category_dict = {k.lower() : sorted(v) for k, v in pickle.load(f).items() if k.isalnum()}
+        category_dict = {k.lower().strip(" :,.!\t\n") : sorted(v) for k, v in pickle.load(f).items()}
 
     # with open(path.replace("metadata.csv", "bookshelves_ebooks_dict.pkl"), "rb") as f:
     #     category_dict = {k : sorted([int(i[2:]) for i in v]) for k, v in pickle.load(f).items() if k.isalnum()}
