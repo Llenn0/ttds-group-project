@@ -339,7 +339,7 @@ def display_category():
 
         start = time.time()
         try:
-            docIds = loader.category_dict.get(str(category_id).lower(), [])
+            docIds = loader.category_dict.get(str(category_id).lower().strip(" :,.!\t\n"), [])
         except Exception as e:
             err_msg = '\n'.join(traceback.format_exception(e))
             print(err_msg, file=sys.stdout, flush=True)
