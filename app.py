@@ -114,7 +114,7 @@ def clearcloudindex():
             inverted_index.size_limit = data["set_cache"]
     except Exception as e:
         err_msg = '\n'.join(traceback.format_exception(e))
-        print(err_msg)
+        print(err_msg, file=sys.stdout, flush=True)
     
     if force_crash:
         raise Exception(f"/setcache POST request asked for crashing the server")
@@ -148,7 +148,7 @@ def semantic_search():
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
-        print(err_msg)
+        print(err_msg, file=sys.stdout, flush=True)
 
     totalNum = len(docIds)
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
@@ -184,7 +184,7 @@ def boolean_search():
                 boolean_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance)
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
-                print(err_msg)
+                print(err_msg, file=sys.stdout, flush=True)
                 docIds = []
             else:
                 docIds = boolean_search_cache[query_info]
@@ -193,6 +193,7 @@ def boolean_search():
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg, file=sys.stdout, flush=True)
 
     totalNum = len(docIds)
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
@@ -230,7 +231,7 @@ def phrase_search():
                 phrase_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance, searchtype="phrase")
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
-                print(err_msg)
+                print(err_msg, file=sys.stdout, flush=True)
                 docIds = []
             else:
                 docIds = phrase_search_cache[query_info]
@@ -239,6 +240,7 @@ def phrase_search():
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg, file=sys.stdout, flush=True)
 
     totalNum = len(docIds)
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
@@ -274,7 +276,7 @@ def keyword_search():
                 tfidf_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, searchtype="tfidf")
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
-                print(err_msg)
+                print(err_msg, file=sys.stdout, flush=True)
                 docIds = []
             else:
                 docIds = tfidf_search_cache[query_info]
@@ -283,6 +285,7 @@ def keyword_search():
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg, file=sys.stdout, flush=True)
 
     totalNum = len(docIds)
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
@@ -308,7 +311,7 @@ def advanced_search():
             docIds = sorted(adv_search(author_query, title_query, languages, subjects))
         except Exception as e:
             err_msg = '\n'.join(traceback.format_exception(e))
-            print(err_msg)
+            print(err_msg, file=sys.stdout, flush=True)
             docIds = []
         queryTime = time.time() - start
         totalNum = len(docIds)
@@ -316,6 +319,7 @@ def advanced_search():
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg, file=sys.stdout, flush=True)
     
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
                 "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
@@ -338,7 +342,7 @@ def display_category():
             docIds = loader.category_dict.get(str(category_id).lower(), [])
         except Exception as e:
             err_msg = '\n'.join(traceback.format_exception(e))
-            print(err_msg)
+            print(err_msg, file=sys.stdout, flush=True)
             docIds = []
         queryTime = time.time() - start
         totalNum = len(docIds)
@@ -346,6 +350,7 @@ def display_category():
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
         err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg, file=sys.stdout, flush=True)
 
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
                 "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
