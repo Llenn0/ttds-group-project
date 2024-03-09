@@ -71,10 +71,10 @@ else:
 searcher = SemanticSearch()
 import KeywordSearch.loader as loader
 
-from KeywordSearch.kwsearch import search_dispatcher, adv_search
+from KeywordSearch.kwsearch import search_dispatcher, adv_search, filter_by_lan_sub
 from KeywordSearch.cloud_index import CloudIndex
 
-inverted_index = CloudIndex(coll, size_limit=1000)
+inverted_index = CloudIndex(coll, size_limit=3000)
 boolean_search_cache = dict()
 phrase_search_cache = dict()
 tfidf_search_cache = dict()
@@ -85,8 +85,8 @@ def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int
     if docIds:
         return [{"id": docId, "title": loader.metadata[docId][2], 
                 "author": loader.metadata[docId][3], "subject": ", ".join(loader.metadata[docId][1]), 
-                "bookshelf": "bookshelf test", "language": ", ".join(loader.metadata[docId][0])} 
-                for docId in docIds[startNum:min(endNum, totalNum)]]
+                "language": ", ".join(loader.metadata[docId][0]), "category": loader.metadata[docId][4]} 
+                for docId in docIds[startNum:endNum]]
     else:
         return []
 
@@ -94,34 +94,9 @@ def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int
 def hello_world():
     return 'Hello, World!'
 
-
 @app.route('/hello')
 def hello():
     return 'world!'
-
-
-@app.route('/semantic', methods=["POST"])
-def semantic_search():
-    data = request.get_json()
-
-    search = data["query"]
-    languages = data["languages"]
-    subjects = data["subjects"]
-    page = data["page"]
-    numPerPage = data["numPerPage"]
-    startNum = (page-1) * numPerPage
-    endNum = startNum + numPerPage
-
-    start = time.time()
-    results = searcher.runSearch(search)
-    queryTime = time.time() - start
-
-    results = list(zip(*results))
-    docIds, scores = list(results[0]), list(results[1])
-    totalNum = len(docIds)
-
-    res_json = {"books": [{"id": int(docId[2:]), "title": "book title", "author": "book author", "subject": "book subject", "bookshelf": "bookshelf test", "language": "English"} for docId in docIds[startNum:endNum]], "queryTime": queryTime, "totalNum": totalNum}
-    return res_json
 
 @app.route('/setcache', methods=["POST"])
 def clearcloudindex():
@@ -130,9 +105,9 @@ def clearcloudindex():
     force_crash = False
     try:
         data = request.get_json()
-        if "force_crash" in data and data["force_crash"]:
-            force_crash = True
-        assert not force_crash, f"/setcache POST request asked for crashing the server: {data}"
+        # if "force_crash" in data and data["force_crash"]:
+        #     force_crash = True
+        # assert not force_crash, f"/setcache POST request asked for crashing the server: {data}"
         if "clear_cache" in data and data["clear_cache"]:
             inverted_index.clear()
         if "set_cache" in data:
@@ -145,6 +120,39 @@ def clearcloudindex():
         raise Exception(f"/setcache POST request asked for crashing the server")
 
     res_json = {"err_msg" : err_msg, "index_size" : cloud_index_size}
+    return res_json
+
+@app.route('/semantic', methods=["POST"])
+def semantic_search():
+    err_msg = "No error"
+    try:
+        data = request.get_json()
+
+        search = data["query"]
+        languages = data["languages"]
+        subjects = data["subjects"]
+        page = data["page"]
+        numPerPage = data["numPerPage"]
+        startNum = (page-1) * numPerPage
+        endNum = startNum + numPerPage
+
+        start = time.time()
+        results = searcher.runSearch(search)
+        queryTime = time.time() - start
+
+        filter_ = filter_by_lan_sub(languages, subjects)
+        results = list(zip(*results))
+        docIds, scores = list(results[0]), list(results[1])
+        docIds = [docId for docId in (int(docId[2:]) for docId in docIds) if docId in filter_]
+    except Exception as e:
+        docIds = []
+        startNum = endNum = totalNum = queryTime = -1
+        err_msg = '\n'.join(traceback.format_exception(e))
+        print(err_msg)
+
+    totalNum = len(docIds)
+    res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
     return res_json
 
 @app.route('/boolean', methods=["POST"])
@@ -278,8 +286,7 @@ def keyword_search():
 
     totalNum = len(docIds)
     res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
-                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg, 
-                "cache_size" : inverted_index.gc()}
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg}
     return res_json
 
 @app.route('/advanced', methods=["POST"])
@@ -320,7 +327,7 @@ def display_category():
     err_msg = "No error"
     try:
         data = request.get_json()
-        bookshelf_id = data["bookshelf"]
+        category_id = data["category"]
         page = data["page"]
         numPerPage = data["numPerPage"]
         startNum = (page-1) * numPerPage
@@ -328,7 +335,7 @@ def display_category():
 
         start = time.time()
         try:
-            docIds = loader.category_dict.get(str(bookshelf_id), [])
+            docIds = loader.category_dict.get(str(category_id).lower(), [])
         except Exception as e:
             err_msg = '\n'.join(traceback.format_exception(e))
             print(err_msg)
