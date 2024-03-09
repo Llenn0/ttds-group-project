@@ -1,7 +1,8 @@
-from typing import Iterable, Dict
+from typing import Iterable, Dict, Generator
 
 import re
 import gc
+import time
 
 import numpy as np
 import scipy.sparse
@@ -12,12 +13,25 @@ from KeywordSearch.cloud_index import CloudIndex
 from KeywordSearch.loader import stemmer, processed_books, stopwords_dict, all_lan_single, sub_dict, LOOKUP_TABLE_PATH
 from KeywordSearch.loader import subject_index, title_index, author_index, subject_ids, title_ids, author_ids
 
+start_loading = time.time()
 # Sparse look-up table aids boolean search
 lookup_table: scipy.sparse.csr_matrix | None
 try:
     lookup_table = scipy.sparse.load_npz(LOOKUP_TABLE_PATH)
 except:
     lookup_table = None
+print(f"Took {(time.time()-start_loading):.2f}s to load boolean lookup table for boolean search")
+
+start_loading = time.time()
+# TF-IDF sparse matrix for every indexed document
+tfidf_matrix: scipy.sparse.csr_matrix | None
+idf: np.ndarray | None
+try:
+    tfidf_matrix = scipy.sparse.load_npz(LOOKUP_TABLE_PATH.replace("lookup_table", "tfidf"))
+    idf = np.load(LOOKUP_TABLE_PATH.replace("lookup_table", "idf"))["arr_0"]
+except:
+    tfidf_matrix = idf = None
+print(f"Took {(time.time()-start_loading):.2f}s to load tfidf matrix and idf array for keyword search")
 
 # Pre-compiled regular expressions for parsing boolean queries
 regex_phrase: re.Pattern                = re.compile(r"\"[\w\s]\"")
@@ -47,8 +61,10 @@ def update_index(processed_books, all_tokens):
     all_elems_arr = np.arange(lookup_table.shape[1], dtype=np.int32)
     gc.collect()
 
-def bool_search(query: str, index: Dict[int, Dict], lans: list[str], subs: list[str], dist: int=3, 
-                force_phrase: bool=False, debug: bool=False) -> set[int]:
+def search_dispatcher(query: str, index: Dict[int, Dict], lans: list[str], subs: list[str], dist: int=3, 
+                searchtype: str="boolean", debug: bool=False) -> set[int]:
+    searchtype = searchtype.casefold()
+    assert searchtype in ("boolean", "phrase", "tfidf"), f"Unrecognized search type: {searchtype}"
     query = unidecode(query)
     filtered_results = filter_by_lan_sub(lans, subs)
     current_stopwords = set()
@@ -58,11 +74,13 @@ def bool_search(query: str, index: Dict[int, Dict], lans: list[str], subs: list[
     if len(current_stopwords) < 1:
         current_stopwords.update(stopwords_dict["english"])
     phrase_params = (current_stopwords, index, dist)
-    if force_phrase or (regex_bool_op.search(query) is None):
-        return phrase_search_wrapper(query, filtered_results, phrase_params, debug)
+    if searchtype == "tfidf":
+        return tfidf_search([word for word in regex_tokenise.findall(query.lower())], filter_=filtered_results)
+    elif searchtype == "phrase" or (regex_bool_op.search(query) is None):
+        return sorted(phrase_search_wrapper(query, filtered_results, phrase_params, debug))
     else:
         filter_arr = np.array(list(filtered_results), dtype=np.uint32)
-        return _bool_search(query, phrase_params, filter_=filtered_results, filter_arr=filter_arr, debug=debug)[0] & filtered_results
+        return sorted(_bool_search(query, phrase_params, filter_=filtered_results, filter_arr=filter_arr, debug=debug)[0] & filtered_results)
 
 def phrase_search_wrapper(query: str, filter_: set[int], phrase_params: tuple, debug: bool=False):
     current_stopwords = phrase_params[0]
@@ -222,6 +240,26 @@ def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, fi
             else:
                 search_result.append(int(docID))
     return set(search_result)
+
+def tfidf_search(words: Iterable[str], filter_: Iterable[int]) -> list[int]:
+    tf_dict = dict()
+    # Use nested generator for best performance, `if word` filters out out-of-vocabulary words
+    for word in (word for word in (token_index_dict[stemmer.stemWord(word)] for word in words) if word):
+        if word in tf_dict:
+            tf_dict[word] += 1
+        else:
+            tf_dict[word] = 1
+    query_tfidf = scipy.sparse.csr_matrix(
+        (
+            list(tf_dict.values()), 
+            (
+                [0] * len(tf_dict), 
+                list(tf_dict)
+            )
+        ), 
+        shape=(1, len(token_index_dict)), dtype=np.float16).multiply(idf)
+    return [book_id for book_id in reversed(tfidf_matrix.dot(query_tfidf.T).todense().ravel().argsort().tolist()[0]) if book_id in filter_]
+
 
 def filter_by_lan_sub(languages: list[str]|str, subjects: list[str]) -> set[int]:
     lan_result = set()
