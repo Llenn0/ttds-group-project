@@ -110,8 +110,11 @@ def return_set():
 def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defaultdict, defaultdict, defaultdict]:
     global category_dict
 
-    with open(path.replace("metadata.csv", "bookshelves_ebooks_dict.pkl"), "rb") as f:
-        category_dict = {k : sorted([int(i[2:]) for i in v]) for k, v in pickle.load(f).items() if k.isalnum()}
+    with open("category_book_ids.pkl", "rb") as f:
+        category_dict = {k.lower() : sorted(v) for k, v in pickle.load(f).items() if k.isalnum()}
+
+    # with open(path.replace("metadata.csv", "bookshelves_ebooks_dict.pkl"), "rb") as f:
+    #     category_dict = {k : sorted([int(i[2:]) for i in v]) for k, v in pickle.load(f).items() if k.isalnum()}
 
     if is_deployment:
         path = deployment_path + path
@@ -155,9 +158,17 @@ def load_meta(path: str="metadata/metadata.csv") -> tuple[dict, list, list, defa
     
     for lan in all_lan:
         for book_id in lan_dict[lan]:
+            book_category = "other"
+            for k, v in category_dict.items():
+                if book_id in v:
+                    book_category = k
+                    break
+            else:
+                category_dict["other"].append(book_id)
             title, author = title_author_dict[book_id]
-            meta[book_id] = (lan, sub_inverted_dict[book_id], title, author)
-    
+            meta[book_id] = (lan, sub_inverted_dict[book_id], title, author, book_category)
+    category_dict["other"].sort()
+
     return meta, all_sub_sorted, sorted(all_lan), lan_dict, sub_dict, all_lan_single
 
 def process_first_k_books(k: int=-1, offset: int=0, batch_size=500):

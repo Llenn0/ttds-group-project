@@ -1,9 +1,10 @@
-.gitignore
 credentials.json
 venv
 .idea
 .env
 data/
+
+# large files stored on cloud storage
 inverted_index.pkl
 bookshelves_categories.pkl
 bookshelves_ebooks.pkl
@@ -15,6 +16,21 @@ __pycache__/
 document_embeddings.pkl
 all_tokens.pkl
 lookup_table.npz
+tfidf.npz
+
+# cache/index folders
+cache/
+index/
+
+# logs
+done_jobs*
+*.log
+*.json
+
+# metadata stuffs
+metadata/bookshelves_html
+metadata/*.bz2
+metadata/bookshelves_categories_dict.pkl
 
 # C extensions
 *.so
@@ -115,16 +131,3 @@ ENV/
 
 # VScode
 .vscode/
-
-# cache/index folders
-cache/
-index/
-
-# logs
-done_jobs*
-*.log
-*.json
-
-# metadata stuffs
-metadata/bookshelves_html
-metadata/*.bz2
