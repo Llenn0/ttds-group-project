@@ -53,6 +53,13 @@ if not os.path.isfile('KeywordSearch/lookup_table.npz'):
 else:
     print("Found Lookup Table File")
 
+if not os.path.isfile('KeywordSearch/tfidf.npz'):
+    blob = bucket.blob('tfidf.npz')
+    blob.download_to_filename("KeywordSearch/tfidf.npz")
+    print("TF-IDF Matrix Downloaded.")
+else:
+    print("Found TF-IDF Matrix File")
+
 if not os.path.isfile('KeywordSearch/all_tokens.pkl'):
     blob = bucket.blob('all_tokens.pkl')
     blob.download_to_filename("KeywordSearch/all_tokens.pkl")
@@ -64,13 +71,15 @@ else:
 searcher = SemanticSearch()
 import KeywordSearch.loader as loader
 
-from KeywordSearch.kwsearch import bool_search, adv_search
+from KeywordSearch.kwsearch import search_dispatcher, adv_search
 from KeywordSearch.cloud_index import CloudIndex
 
 inverted_index = CloudIndex(coll, size_limit=1000)
 boolean_search_cache = dict()
 phrase_search_cache = dict()
+tfidf_search_cache = dict()
 paging_cache_limit = 20
+tfidf_paging_cache_limit = 10
 
 def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int) -> dict:
     if docIds:
@@ -164,7 +173,7 @@ def boolean_search():
                 oldest_result = list(boolean_search_cache.keys())[0]
                 del boolean_search_cache[oldest_result]
             try:
-                boolean_search_cache[query_info] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance))
+                boolean_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance)
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg)
@@ -210,13 +219,57 @@ def phrase_search():
                 oldest_result = list(phrase_search_cache.keys())[0]
                 del phrase_search_cache[oldest_result]
             try:
-                phrase_search_cache[query_info] = sorted(bool_search(search_query, inverted_index, languages, subjects, max_distance, force_phrase=True))
+                phrase_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance, searchtype="phrase")
             except Exception as e:
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg)
                 docIds = []
             else:
                 docIds = phrase_search_cache[query_info]
+        queryTime = time.time() - start
+    except Exception as e:
+        docIds = []
+        startNum = endNum = totalNum = queryTime = -1
+        err_msg = '\n'.join(traceback.format_exception(e))
+
+    totalNum = len(docIds)
+    res_json = {"books": format_book_ids(docIds, startNum, endNum, totalNum), 
+                "queryTime": queryTime, "totalNum": totalNum, "err_msg" : err_msg, 
+                "cache_size" : inverted_index.gc()}
+    return res_json
+
+@app.route('/keyword', methods=["POST"])
+def keyword_search():
+    global tfidf_search_cache
+    err_msg = "No error"
+    try:
+        data = request.get_json()
+        search_query = data["query"]
+        languages = data["languages"]
+        subjects = data["subjects"]
+        page = data["page"]
+        numPerPage = data["numPerPage"]
+        startNum = (page-1) * numPerPage
+        endNum = startNum + numPerPage
+
+        if "clear_cache" in data and data["clear_cache"]:
+            tfidf_search_cache.clear()
+
+        start = time.time()
+        query_info = search_query + str(sorted(languages)) + str(sorted(subjects))
+        docIds = tfidf_search_cache.get(query_info, None)
+        if docIds is None:
+            if len(tfidf_search_cache) > tfidf_paging_cache_limit:
+                oldest_result = list(tfidf_search_cache.keys())[0]
+                del tfidf_search_cache[oldest_result]
+            try:
+                tfidf_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, searchtype="tfidf")
+            except Exception as e:
+                err_msg = '\n'.join(traceback.format_exception(e))
+                print(err_msg)
+                docIds = []
+            else:
+                docIds = tfidf_search_cache[query_info]
         queryTime = time.time() - start
     except Exception as e:
         docIds = []
