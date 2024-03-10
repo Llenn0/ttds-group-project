@@ -190,7 +190,7 @@ def boolean_search():
             try:
                 boolean_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance)
             except Exception as e:
-                inverted_index.clear()
+                inverted_index.clear_bugged_documents()
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg, file=sys.stdout, flush=True)
                 docIds = []
@@ -238,6 +238,7 @@ def phrase_search():
             try:
                 phrase_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance, searchtype="phrase")
             except Exception as e:
+                inverted_index.clear_bugged_documents()
                 inverted_index.clear()
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg, file=sys.stdout, flush=True)

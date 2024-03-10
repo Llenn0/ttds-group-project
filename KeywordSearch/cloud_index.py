@@ -225,9 +225,11 @@ class CloudIndexDict(dict):
     def __init__(self, index_api: firestore.CollectionReference):
         self.index_api = index_api
         self.pre_alloc = []
+        self.last_access = []
         super().__init__(self)
     def clear(self) -> None:
         self.pre_alloc = []
+        self.last_access = []
         return super().clear()
     def __missing__(self, key: int|tuple[int]) -> CloudDoc|list[CloudDoc]:
         if isinstance(key, int):
@@ -236,6 +238,7 @@ class CloudIndexDict(dict):
         else:
             str_keys = [str(k) for k in key if k not in self]
             keys_in_self = (k for k in key if k in self)
+            self.last_access = list(key)
             if len(self.pre_alloc):
                 for k in keys_in_self:
                     doc: CloudDoc = self[k]
@@ -262,6 +265,11 @@ class CloudIndex:
     
     def clear(self):
         self.cache.clear()
+    
+    def clear_bugged_documents(self):
+        for k in self.cache.last_access:
+            if k in self.cache:
+                del self.cache[k]
 
     def gc(self) -> int:
         self.cache.pre_alloc = []
