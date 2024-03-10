@@ -74,12 +74,12 @@ import KeywordSearch.loader as loader
 from KeywordSearch.kwsearch import search_dispatcher, adv_search, filter_by_lan_sub
 from KeywordSearch.cloud_index import CloudIndex
 
-inverted_index = CloudIndex(coll, size_limit=3000)
+inverted_index = CloudIndex(coll, size_limit=5000)
+semantic_search_cache = dict()
 boolean_search_cache = dict()
 phrase_search_cache = dict()
 tfidf_search_cache = dict()
-paging_cache_limit = 20
-tfidf_paging_cache_limit = 10
+paging_cache_limit = 10
 
 def format_book_ids(docIds: list[int], startNum: int, endNum: int, totalNum: int) -> dict:
     if docIds:
@@ -128,7 +128,7 @@ def semantic_search():
     try:
         data = request.get_json()
 
-        search = data["query"]
+        search_query = data["query"]
         languages = data["languages"]
         subjects = data["subjects"]
         page = data["page"]
@@ -136,14 +136,21 @@ def semantic_search():
         startNum = (page-1) * numPerPage
         endNum = startNum + numPerPage
 
-        start = time.time()
-        results = searcher.runSearch(search)
-        queryTime = time.time() - start
+        query_info = search_query + str(sorted(languages)) + str(sorted(subjects))
+        docIds = semantic_search_cache.get(query_info, None)
+        if docIds is None:
+            if len(semantic_search_cache) > paging_cache_limit:
+                oldest_result = list(semantic_search_cache.keys())[0]
+                del semantic_search_cache[oldest_result]
+            start = time.time()
+            results = searcher.runSearch(search_query)
+            queryTime = time.time() - start
 
-        filter_ = filter_by_lan_sub(languages, subjects)
-        results = list(zip(*results))
-        docIds, scores = list(results[0]), list(results[1])
-        docIds = [docId for docId in (int(docId[2:]) for docId in docIds) if docId in filter_]
+            filter_ = filter_by_lan_sub(languages, subjects)
+            results = list(zip(*results))
+            docIds, scores = list(results[0]), list(results[1])
+            docIds = [docId for docId in (int(docId[2:]) for docId in docIds) if docId in filter_]
+            semantic_search_cache[query_info] = docIds
     except Exception as e:
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
@@ -183,6 +190,7 @@ def boolean_search():
             try:
                 boolean_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance)
             except Exception as e:
+                inverted_index.clear()
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg, file=sys.stdout, flush=True)
                 docIds = []
@@ -230,6 +238,7 @@ def phrase_search():
             try:
                 phrase_search_cache[query_info] = search_dispatcher(search_query, inverted_index, languages, subjects, max_distance, searchtype="phrase")
             except Exception as e:
+                inverted_index.clear()
                 err_msg = '\n'.join(traceback.format_exception(e))
                 print(err_msg, file=sys.stdout, flush=True)
                 docIds = []
@@ -269,7 +278,7 @@ def keyword_search():
         query_info = search_query + str(sorted(languages)) + str(sorted(subjects))
         docIds = tfidf_search_cache.get(query_info, None)
         if docIds is None:
-            if len(tfidf_search_cache) > tfidf_paging_cache_limit:
+            if len(tfidf_search_cache) > paging_cache_limit:
                 oldest_result = list(tfidf_search_cache.keys())[0]
                 del tfidf_search_cache[oldest_result]
             try:
