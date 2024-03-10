@@ -2,7 +2,7 @@
 *where books are Guten-free and searching is as refreshing as saying Guten Tag\*~*
 > * Guten Tag is "Good Day" in Germany
 ___
-This is the back-end of GutenTag, powered by Cloud Run at [this link](https://ttds-gutenberg-fvyohsgcaq-nw.a.run.app/), for front-end please visit https://gutenberg-search-fvyohsgcaq-ez.a.run.app/hello (the `hello` part is necessary due to limitations in routing)
+This is the back-end of GutenTag, powered by Cloud Run at [this link](https://ttds-gutenberg-fvyohsgcaq-nw.a.run.app/), for front-end please visit https://gutenberg-search-fvyohsgcaq-ez.a.run.app/hello (the `hello` part is necessary in some browsers due to limitations in routing)
 
 Supported search methods:
 - **Semantic Search:** a sentence-transformer model is used to embed query text into feature vector and cosine similarity is used to perform an approximated nearest-neighbour search with feature vectors of all English books, results are ranked by cosine similarit
