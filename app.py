@@ -136,21 +136,20 @@ def semantic_search():
         startNum = (page-1) * numPerPage
         endNum = startNum + numPerPage
 
+        start = time.time()
         query_info = search_query + str(sorted(languages)) + str(sorted(subjects))
         docIds = semantic_search_cache.get(query_info, None)
         if docIds is None:
             if len(semantic_search_cache) > paging_cache_limit:
                 oldest_result = list(semantic_search_cache.keys())[0]
                 del semantic_search_cache[oldest_result]
-            start = time.time()
             results = searcher.runSearch(search_query)
-            queryTime = time.time() - start
-
             filter_ = filter_by_lan_sub(languages, subjects)
             results = list(zip(*results))
             docIds, scores = list(results[0]), list(results[1])
             docIds = [docId for docId in (int(docId[2:]) for docId in docIds) if docId in filter_]
             semantic_search_cache[query_info] = docIds
+        queryTime = time.time() - start
     except Exception as e:
         docIds = []
         startNum = endNum = totalNum = queryTime = -1
