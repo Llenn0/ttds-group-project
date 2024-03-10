@@ -136,9 +136,9 @@ def semantic_search():
         startNum = (page-1) * numPerPage
         endNum = startNum + numPerPage
 
+        start = time.time()
         query_info = search_query + str(sorted(languages)) + str(sorted(subjects))
         docIds = semantic_search_cache.get(query_info, None)
-        start = time.time()
         if docIds is None:
             if len(semantic_search_cache) > paging_cache_limit:
                 oldest_result = list(semantic_search_cache.keys())[0]
