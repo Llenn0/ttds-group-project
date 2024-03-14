@@ -1,5 +1,5 @@
 # GutenTag - A Multi-lingual Search Engine for Project Gutenberg Books.
-*where books are Guten-free and searching is as refreshing as saying Guten Tag\*~*
+*where books are Guten-free and searching is a piece of cake\*~*
 > * Guten Tag is "Good Day" in Germany
 ___
 This is the back-end of GutenTag, powered by Cloud Run at [this link](https://ttds-gutenberg-fvyohsgcaq-nw.a.run.app/), for front-end please visit https://gutenberg-search-fvyohsgcaq-ez.a.run.app/hello (the `hello` part is necessary in some browsers due to limitations in routing)
