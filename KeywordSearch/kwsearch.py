@@ -180,7 +180,7 @@ def bool_search_atomic(query: str, phrase_params: tuple, filter_: set[int]=all_e
                 is_not = is_and = is_or = False
     if isinstance(valid, np.ndarray):
         valid = set(valid.tolist())
-    return valid, (is_not, is_and, is_or)
+    return set(valid), (is_not, is_and, is_or)
 
 def phrase_search_cloud(words: list[str], index: CloudIndex, max_dist: int=1, filter_: set=all_elems_set, debug: bool=False) -> set[int]:
     search_result = []
